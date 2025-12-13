@@ -8,7 +8,7 @@ import { FeatureList } from './FeatureList'
 import { TechStackSelector } from './TechStackSelector'
 import { AestheticsSelector } from './AestheticsSelector'
 import { GitHubSetup } from './GitHubSetup'
-import type { ProjectConfig, GitHubConfig } from '../types'
+import type { ProjectConfig } from '../types'
 
 const projectSchema = z.object({
   name: z.string().min(1, 'Project name is required').max(50),
