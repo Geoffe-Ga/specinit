@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -102,7 +103,7 @@ async def validate_github_token(request: GitHubTokenRequest) -> dict[str, Any]:
     except Exception as e:
         return {
             "valid": False,
-            "message": f"Token validation failed: {str(e)}",
+            "message": f"Token validation failed: {e}",
         }
 
 
@@ -221,9 +222,7 @@ async def generate_project(websocket: WebSocket) -> None:
 
 def start_server(port: int = 8765, output_dir: Path | None = None) -> None:
     """Start the FastAPI server."""
-    import uvicorn
-
-    global _output_dir, _shutdown_event
+    global _output_dir, _shutdown_event  # noqa: PLW0603
 
     if output_dir:
         _output_dir = output_dir

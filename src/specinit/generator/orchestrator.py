@@ -1,10 +1,11 @@
 """Generation orchestrator for the 8-step process."""
 
 import asyncio
+import subprocess
 import time
 from collections.abc import Callable, Coroutine
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar, cast
 
 from anthropic import Anthropic
 
@@ -21,7 +22,7 @@ ProgressCallback = Callable[[str, str, dict | None], Coroutine[Any, Any, None]]
 class GenerationOrchestrator:
     """Orchestrates the 8-step project generation process."""
 
-    STEPS = [
+    STEPS: ClassVar[list[tuple[str, str]]] = [
         ("product_spec", "Generating product specification"),
         ("structure", "Creating project structure"),
         ("documentation", "Writing documentation"),
@@ -169,7 +170,7 @@ class GenerationOrchestrator:
         # Extract text from the first content block
         content_block = response.content[0]
         if hasattr(content_block, "text"):
-            return content_block.text
+            return cast(str, content_block.text)
         raise ValueError(f"Unexpected content block type: {type(content_block)}")
 
     async def _generate_product_spec(self, context: dict[str, Any]) -> None:
@@ -232,10 +233,8 @@ class GenerationOrchestrator:
 
     async def _init_git(self, context: dict[str, Any]) -> None:
         """Step 7: Initialize Git repository."""
-        import subprocess
-
         # Initialize git
-        subprocess.run(["git", "init"], cwd=self.project_path, capture_output=True)
+        subprocess.run(["git", "init"], cwd=self.project_path, capture_output=True, check=False)
 
         # Create .gitignore if not exists
         gitignore_path = self.project_path / ".gitignore"
@@ -255,11 +254,12 @@ Features:
 
 Generated with SpecInit
 """
-        subprocess.run(["git", "add", "."], cwd=self.project_path, capture_output=True)
+        subprocess.run(["git", "add", "."], cwd=self.project_path, capture_output=True, check=False)
         subprocess.run(
             ["git", "commit", "-m", commit_message],
             cwd=self.project_path,
             capture_output=True,
+            check=False,
         )
 
         self.file_writer.append(

@@ -138,7 +138,7 @@ class TemplateSelector:
         best_template = None
         best_score = -1
 
-        for _template_id, template in TEMPLATES.items():
+        for template in TEMPLATES.values():
             score = self._score_template(template, platforms_lower, frontend_tech, backend_tech)
             if score > best_score:
                 best_score = score

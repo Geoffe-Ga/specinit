@@ -101,6 +101,7 @@ Generate a bash script that creates all necessary directories and empty files fo
 Required directories:
 - plan/ (for product-spec.md, progress-notes.md, audit-log.md)
 - docs/ (for README.md, CONTRIBUTING.md, CLAUDE.md)
+- scripts/ (for lint.sh, test.sh, check.sh - consistency between local/CI)
 - src/ or appropriate source directory
 - tests/
 - .github/workflows/
@@ -147,6 +148,26 @@ Generate comprehensive documentation files.
 - Issue templates
 
 ### docs/CLAUDE.md
+CRITICAL: This file must include these exact sections at the top:
+
+## Critical Rules
+
+### No Shortcuts
+**Never take shortcuts when fixing tests or checks:**
+- Do not comment out or skip failing tests
+- Do not relax linter rules or filters to make errors go away
+- Do not change test assertions to match incorrect behavior
+- All tests must test real functionality
+- All checks must enforce valid requirements
+- If a test fails, fix the underlying code, not the test (unless the test itself is wrong)
+
+### Working Directory
+**Always operate from the project root directory. Do not cd into subdirectories when running commands.** All paths in commands should be relative to the project root.
+
+### Use Scripts for Consistency
+**Always use the provided scripts in scripts/ for running tests and checks.** This ensures consistency between local development, pre-commit hooks, and CI.
+
+After the Critical Rules section, also include:
 - AI context for future development
 - Key architectural decisions and rationale
 - Known gotchas and edge cases
@@ -183,37 +204,90 @@ Project: {context["project_name"]}
 Tech Stack: {", ".join(all_tech)}
 
 # Your Task
-Generate developer tooling configuration files.
+Generate STRICT, SECURITY-FOCUSED developer tooling configuration files.
 
-## Required Files (based on tech stack)
+## Philosophy
+- Modern, battle-tested tools only
+- Strict by default - catch bugs early
+- Security checks enabled (bandit/security linting)
+- Consistency between local dev, pre-commit, and CI
+- Use scripts to run checks (not direct tool calls)
 
-For JavaScript/TypeScript projects:
-- .eslintrc.js or eslint.config.js
-- .prettierrc
-- tsconfig.json (if TypeScript)
+## Required Files
 
-For Python projects:
-- pyproject.toml (ruff config section)
-- .pre-commit-config.yaml
+### scripts/lint.sh
+```bash
+#!/bin/bash
+set -e
+# Run all linting - matches CI exactly
+```
 
-For all projects:
-- .pre-commit-config.yaml
-- .github/workflows/ci.yml (GitHub Actions)
-- .editorconfig
+### scripts/test.sh
+```bash
+#!/bin/bash
+set -e
+# Run all tests with coverage - matches CI exactly
+```
 
-# Requirements
-1. All configs must work together (e.g., ESLint + Prettier compatible)
-2. Pre-commit hooks must be functional
-3. CI workflow should run tests and linters
-4. Use modern, maintained tools
+### scripts/check.sh
+```bash
+#!/bin/bash
+set -e
+./scripts/lint.sh
+./scripts/test.sh
+```
+
+### For Python projects - pyproject.toml must include:
+```toml
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+    "ARG",    # flake8-unused-arguments
+    "SIM",    # flake8-simplify
+    "S",      # flake8-bandit (SECURITY)
+    "PTH",    # flake8-use-pathlib
+    "RUF",    # Ruff-specific rules
+    "PERF",   # Perflint (performance)
+    "PL",     # Pylint
+]
+```
+
+### For JavaScript/TypeScript projects:
+- ESLint with security plugin (eslint-plugin-security)
+- TypeScript strict mode enabled
+- Prettier for formatting
+
+### .pre-commit-config.yaml
+- Use LOCAL hooks (not external repos) to ensure same versions as CI
+- Run via `python -m <tool>` for consistency
+
+### .github/workflows/ci.yml
+- Run ./scripts/lint.sh and ./scripts/test.sh
+- Test on multiple Python/Node versions
+- Fail fast on any error
+
+## Key Principles
+1. Pre-commit and CI MUST run identical checks
+2. All security linting enabled (S rules for Python, security plugin for JS)
+3. Scripts wrap all commands for consistency
+4. Strict type checking where applicable
 
 # Output Format
 Output the files in this format:
 
---- FILE: .eslintrc.js ---
+--- FILE: scripts/lint.sh ---
 (content)
 
---- FILE: .prettierrc ---
+--- FILE: scripts/test.sh ---
+(content)
+
+--- FILE: pyproject.toml ---
 (content)
 
 (etc.)

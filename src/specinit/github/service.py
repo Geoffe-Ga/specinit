@@ -4,7 +4,7 @@ import contextlib
 import re
 import subprocess
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import keyring
 import requests
@@ -82,7 +82,7 @@ class GitHubService:
 
         response = self.session.get(f"{GITHUB_API_BASE}/user")
         response.raise_for_status()
-        return response.json()
+        return cast(dict[str, Any], response.json())
 
     @staticmethod
     def parse_repo_url(url: str) -> tuple[str, str]:
@@ -123,7 +123,7 @@ class GitHubService:
             },
         )
         response.raise_for_status()
-        return response.json()
+        return cast(dict[str, Any], response.json())
 
     def create_issue(
         self,
@@ -209,7 +209,9 @@ class GitHubService:
             json={"title": title, "description": description},
         )
         response.raise_for_status()
-        return response.json()["number"]
+        result = response.json()["number"]
+        assert isinstance(result, int)
+        return result
 
     def create_label(
         self,
@@ -284,7 +286,7 @@ class GitHubService:
             f"{GITHUB_API_BASE}/repos/{owner}/{repo}/commits/{ref}/check-runs"
         )
         response.raise_for_status()
-        return response.json()
+        return cast(dict[str, Any], response.json())
 
     def get_pr_reviews(self, owner: str, repo: str, pr_number: int) -> list[dict[str, Any]]:
         """Get reviews for a pull request."""
@@ -292,7 +294,7 @@ class GitHubService:
             f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls/{pr_number}/reviews"
         )
         response.raise_for_status()
-        return response.json()
+        return cast(list[dict[str, Any]], response.json())
 
     def get_pr_comments(self, owner: str, repo: str, pr_number: int) -> list[dict[str, Any]]:
         """Get review comments for a pull request."""
@@ -300,7 +302,7 @@ class GitHubService:
             f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls/{pr_number}/comments"
         )
         response.raise_for_status()
-        return response.json()
+        return cast(list[dict[str, Any]], response.json())
 
     def merge_pull_request(
         self,
@@ -329,7 +331,8 @@ class GitHubService:
             params=params,
         )
         response.raise_for_status()
-        return response.json().get("workflow_runs", [])
+        data = cast(dict[str, Any], response.json())
+        return cast(list[dict[str, Any]], data.get("workflow_runs", []))
 
     def get_workflow_run_logs(self, owner: str, repo: str, run_id: int) -> str:
         """Get logs for a workflow run."""
@@ -349,6 +352,7 @@ def setup_git_remote(repo_url: str, remote_name: str = "origin") -> None:
         ["git", "remote", "get-url", remote_name],
         capture_output=True,
         text=True,
+        check=False,
     )
 
     if result.returncode == 0:
@@ -368,7 +372,7 @@ def setup_git_remote(repo_url: str, remote_name: str = "origin") -> None:
 def create_branch(branch_name: str, base: str = "main") -> None:
     """Create and checkout a new branch."""
     subprocess.run(["git", "checkout", base], check=True, capture_output=True)
-    subprocess.run(["git", "pull", "--rebase"], capture_output=True)
+    subprocess.run(["git", "pull", "--rebase"], capture_output=True, check=False)
     subprocess.run(["git", "checkout", "-b", branch_name], check=True)
 
 

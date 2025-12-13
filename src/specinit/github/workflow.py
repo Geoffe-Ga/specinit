@@ -1,6 +1,7 @@
 """GitHub workflow orchestration for issue-driven development."""
 
 import asyncio
+import re
 import subprocess
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
@@ -430,6 +431,7 @@ Create comprehensive integration tests for all features.
             cwd=self.project_path,
             capture_output=True,
             text=True,
+            check=False,
         )
 
         if result.returncode == 0:
@@ -543,6 +545,7 @@ Create comprehensive integration tests for all features.
             subprocess.run(
                 ["git", "commit", "-m", "fix: address review feedback"],
                 cwd=self.project_path,
+                check=False,
             )
             push_branch(workflow_issue.branch_name, force=False)
 
@@ -559,8 +562,6 @@ Create comprehensive integration tests for all features.
 
     def _slugify(self, text: str) -> str:
         """Convert text to a URL-safe slug."""
-        import re
-
         # Remove brackets and special chars
         text = re.sub(r"[\[\]()]", "", text)
         # Convert to lowercase and replace spaces

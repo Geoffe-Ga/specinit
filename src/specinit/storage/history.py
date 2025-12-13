@@ -85,11 +85,12 @@ class HistoryManager:
             return
 
         set_clause = ", ".join(f"{k} = ?" for k in updates)
-        values = list(updates.values()) + [project_id]
+        values = [*list(updates.values()), project_id]
 
         with sqlite3.connect(HISTORY_DB) as conn:
+            # S608: Not SQL injection - field names are from hardcoded allowed_fields
             conn.execute(
-                f"UPDATE projects SET {set_clause} WHERE id = ?",
+                f"UPDATE projects SET {set_clause} WHERE id = ?",  # noqa: S608
                 values,
             )
             conn.commit()
@@ -131,4 +132,6 @@ class HistoryManager:
         """Get total number of projects generated."""
         with sqlite3.connect(HISTORY_DB) as conn:
             cursor = conn.execute("SELECT COUNT(*) FROM projects")
-            return cursor.fetchone()[0]
+            result = cursor.fetchone()[0]
+            assert isinstance(result, int)
+            return result

@@ -1,19 +1,34 @@
 # CLAUDE.md - AI Context for SpecInit Development
 
-## Important: Working Directory
+## Critical Rules
+
+### No Shortcuts
+
+**Never take shortcuts when fixing tests or checks:**
+- Do not comment out or skip failing tests
+- Do not relax linter rules or filters to make errors go away
+- Do not change test assertions to match incorrect behavior
+- All tests must test real functionality
+- All checks must enforce valid requirements
+- If a test fails, fix the underlying code, not the test (unless the test itself is wrong)
+
+### Working Directory
 
 **Always operate from the project root directory. Do not `cd` into subdirectories when running commands.** All paths in commands should be relative to the project root.
 
-Examples:
-```bash
-# Correct - run from project root
-pytest tests/
-ruff check src/
-pip install -e .
+### Use Scripts for Consistency
 
-# Incorrect - do not cd into directories
-cd tests && pytest  # Don't do this
-cd src && ruff check .  # Don't do this
+**Always use the provided scripts in `scripts/` for running tests and checks.** This ensures consistency between local development, pre-commit hooks, and CI.
+
+```bash
+# Use these scripts
+./scripts/lint.sh      # Run all linting (ruff check, ruff format --check, mypy)
+./scripts/test.sh      # Run all tests with coverage
+./scripts/check.sh     # Run both lint and test
+
+# Do NOT run these directly (use scripts instead)
+pytest tests/          # Use ./scripts/test.sh
+ruff check src/        # Use ./scripts/lint.sh
 ```
 
 ## Overview
@@ -60,21 +75,14 @@ pip install -e ".[dev]"
 pre-commit install
 ```
 
-### Running Tests
+### Running Tests and Linting
 ```bash
-pytest tests/ -v
-pytest tests/unit/ -v --cov=src/specinit
-```
+# Recommended: Use scripts for consistency with CI
+./scripts/lint.sh      # Linting only
+./scripts/test.sh      # Tests only
+./scripts/check.sh     # Both lint and test
 
-### Linting
-```bash
-ruff check src/ tests/
-ruff format src/ tests/
-mypy src/
-```
-
-### Pre-commit
-```bash
+# Pre-commit (runs same checks as CI)
 pre-commit run --all-files
 ```
 

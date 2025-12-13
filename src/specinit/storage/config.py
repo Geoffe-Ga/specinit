@@ -2,7 +2,7 @@
 
 import contextlib
 import os
-from datetime import UTC
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -50,7 +50,7 @@ class ConfigManager:
     def _load_config(self) -> None:
         """Load configuration from file or create defaults."""
         if CONFIG_FILE.exists():
-            with open(CONFIG_FILE) as f:
+            with CONFIG_FILE.open() as f:
                 self._config = yaml.safe_load(f) or {}
             # Merge with defaults for any missing keys
             self._config = self._deep_merge(DEFAULT_CONFIG.copy(), self._config)
@@ -60,7 +60,7 @@ class ConfigManager:
 
     def _save_config(self) -> None:
         """Save configuration to file."""
-        with open(CONFIG_FILE, "w") as f:
+        with CONFIG_FILE.open("w") as f:
             yaml.dump(self._config, f, default_flow_style=False)
         # Set file permissions to user-only
         CONFIG_FILE.chmod(0o600)
@@ -151,8 +151,6 @@ class ConfigManager:
 
     def update_usage(self, cost: float) -> None:
         """Update usage statistics after project generation."""
-        from datetime import datetime
-
         self._config["usage"]["projects_created"] += 1
         self._config["usage"]["total_cost"] += cost
         self._config["usage"]["last_used"] = datetime.now(UTC).isoformat()
