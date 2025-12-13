@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from specinit.generator.orchestrator import GenerationOrchestrator
+from specinit.github.service import GitHubService
 from specinit.storage.config import ConfigManager
 
 app = FastAPI(title="SpecInit", description="AI-powered project initialization")
@@ -30,6 +31,16 @@ _output_dir: Path = Path.cwd()
 _shutdown_event: asyncio.Event | None = None
 
 
+class GitHubConfigModel(BaseModel):
+    """GitHub configuration."""
+
+    enabled: bool = False
+    repo_url: str = ""
+    create_repo: bool = True
+    yolo_mode: bool = False
+    token_configured: bool = False
+
+
 class ProjectConfig(BaseModel):
     """Project configuration from form submission."""
 
@@ -39,6 +50,13 @@ class ProjectConfig(BaseModel):
     features: list[str]
     tech_stack: dict[str, list[str]]  # frontend, backend, database, tools
     aesthetics: list[str]
+    github: GitHubConfigModel | None = None
+
+
+class GitHubTokenRequest(BaseModel):
+    """Request to validate and store GitHub token."""
+
+    token: str
 
 
 class CostEstimate(BaseModel):
@@ -64,6 +82,46 @@ async def get_config() -> dict[str, Any]:
         "model": config.get("api.model"),
         "cost_limit": config.get("preferences.cost_limit"),
     }
+
+
+@app.post("/api/github/validate-token")
+async def validate_github_token(request: GitHubTokenRequest) -> dict[str, Any]:
+    """Validate and store a GitHub token."""
+    try:
+        github = GitHubService(token=request.token)
+        user_info = github.validate_token()
+
+        # Store the token securely
+        GitHubService.set_token(request.token)
+
+        return {
+            "valid": True,
+            "username": user_info.get("login"),
+            "message": "Token validated and stored successfully",
+        }
+    except Exception as e:
+        return {
+            "valid": False,
+            "message": f"Token validation failed: {str(e)}",
+        }
+
+
+@app.get("/api/github/status")
+async def github_status() -> dict[str, Any]:
+    """Check GitHub token status."""
+    token = GitHubService.get_token()
+    if not token:
+        return {"configured": False}
+
+    try:
+        github = GitHubService(token=token)
+        user_info = github.validate_token()
+        return {
+            "configured": True,
+            "username": user_info.get("login"),
+        }
+    except Exception:
+        return {"configured": False, "error": "Token invalid or expired"}
 
 
 @app.post("/api/estimate")

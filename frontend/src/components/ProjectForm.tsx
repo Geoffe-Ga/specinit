@@ -7,7 +7,8 @@ import { UserStoryInput } from './UserStoryInput'
 import { FeatureList } from './FeatureList'
 import { TechStackSelector } from './TechStackSelector'
 import { AestheticsSelector } from './AestheticsSelector'
-import type { ProjectConfig } from '../types'
+import { GitHubSetup } from './GitHubSetup'
+import type { ProjectConfig, GitHubConfig } from '../types'
 
 const projectSchema = z.object({
   name: z.string().min(1, 'Project name is required').max(50),
@@ -25,6 +26,13 @@ const projectSchema = z.object({
     tools: z.array(z.string()),
   }),
   aesthetics: z.array(z.string()).max(3, 'Select up to 3 aesthetics'),
+  github: z.object({
+    enabled: z.boolean(),
+    repoUrl: z.string(),
+    createRepo: z.boolean(),
+    yoloMode: z.boolean(),
+    tokenConfigured: z.boolean(),
+  }),
 })
 
 type FormData = z.infer<typeof projectSchema>
@@ -35,7 +43,7 @@ interface ProjectFormProps {
 
 export function ProjectForm({ onSubmit }: ProjectFormProps) {
   const [step, setStep] = useState(1)
-  const totalSteps = 5
+  const totalSteps = 6
 
   const {
     register,
@@ -52,6 +60,13 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
       features: [],
       techStack: { frontend: [], backend: [], database: [], tools: [] },
       aesthetics: [],
+      github: {
+        enabled: false,
+        repoUrl: '',
+        createRepo: true,
+        yoloMode: false,
+        tokenConfigured: false,
+      },
     },
   })
 
@@ -180,6 +195,23 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
             selected={currentValues.aesthetics}
             onChange={(aesthetics) => setValue('aesthetics', aesthetics)}
             error={errors.aesthetics?.message}
+          />
+        </div>
+      )}
+
+      {/* Step 6: GitHub Integration */}
+      {step === 6 && (
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-xl font-semibold mb-4">GitHub Integration</h2>
+          <p className="text-gray-600 mb-4">
+            Choose how you want SpecInit to generate your project. GitHub Mode creates
+            issues, branches, and PRs for better tracking and accuracy.
+          </p>
+
+          <GitHubSetup
+            value={currentValues.github}
+            onChange={(github) => setValue('github', github)}
+            projectName={currentValues.name}
           />
         </div>
       )}

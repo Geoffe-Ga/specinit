@@ -11,6 +11,14 @@ export interface TechStack {
   tools: string[]
 }
 
+export interface GitHubConfig {
+  enabled: boolean
+  repoUrl: string
+  createRepo: boolean
+  yoloMode: boolean
+  tokenConfigured: boolean
+}
+
 export interface ProjectConfig {
   name: string
   platforms: string[]
@@ -18,6 +26,7 @@ export interface ProjectConfig {
   features: string[]
   techStack: TechStack
   aesthetics: string[]
+  github: GitHubConfig
 }
 
 export interface GenerationResult {
@@ -34,6 +43,16 @@ export interface StepProgress {
     cost?: number
     message?: string
   }
+}
+
+export interface IssueProgress {
+  issueNumber: number
+  title: string
+  status: 'queued' | 'in_progress' | 'pr_created' | 'ci_running' | 'ci_failed' | 'in_review' | 'changes_requested' | 'approved' | 'merged' | 'blocked' | 'failed'
+  prNumber?: number
+  prUrl?: string
+  branch?: string
+  commentsResolved?: number
 }
 
 export const PLATFORMS = [

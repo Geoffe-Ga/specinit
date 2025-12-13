@@ -887,10 +887,367 @@ Version controlled (included in git)
 Human-readable markdown format
 
 
+---
+
+## Feature 6: GitHub Integration Mode
+
+### Overview
+
+GitHub Mode transforms SpecInit from a file generator into an issue-driven development orchestrator. When enabled, SpecInit creates GitHub issues for each implementation task, works through them systematically using branches and PRs, and can optionally auto-resolve review feedback.
+
+**Key Benefits:**
+- Better accuracy through structured task breakdown
+- Full traceability via issue/PR history
+- Parallel execution where tasks are independent
+- Automated CI validation and review resolution
+
+### Question 6: GitHub Mode (New Configuration Question)
+
+**Component:** Toggle switch with expandable settings panel
+
+**Options:**
+1. **Local Mode (Default)** - Generate files locally without GitHub integration
+2. **GitHub Mode** - Issue-driven development with full GitHub integration
+   - Sub-option: **YOLO Mode** - Auto-resolve review feedback recursively until merge
+
+**When GitHub Mode is selected, additional inputs appear:**
+- GitHub Repository URL (or create new)
+- Token setup wizard (walks through PAT generation)
+
+### GitHub Setup Flow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  GitHub Integration Setup                                    │
+│                                                              │
+│  ○ Local Mode - Generate files without GitHub               │
+│  ● GitHub Mode - Issue-driven development                   │
+│                                                              │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │ Repository URL:                                          ││
+│  │ [https://github.com/user/my-project________________]    ││
+│  │                                                          ││
+│  │ □ Create new repository if doesn't exist                ││
+│  │                                                          ││
+│  │ GitHub Token: [Configure Token...]                       ││
+│  │ ✓ Token configured and validated                         ││
+│  │                                                          ││
+│  │ □ Enable YOLO Mode                                       ││
+│  │   Auto-resolve CI failures and review feedback           ││
+│  │   (recursively iterate until all checks pass)           ││
+│  └─────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Token Setup Wizard
+
+When user clicks "Configure Token":
+
+1. **Check for existing token** in keyring
+2. **If not found**, display step-by-step guide:
+   ```
+   GitHub Token Setup
+
+   1. Go to: https://github.com/settings/tokens/new
+   2. Note: "SpecInit CLI Access"
+   3. Select scopes:
+      ✓ repo (Full control of private repositories)
+      ✓ workflow (Update GitHub Action workflows)
+   4. Generate token and paste below:
+
+   [ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx]
+
+   [Validate & Save]
+   ```
+3. **Validate token** by calling GitHub API
+4. **Store securely** in OS keyring (same as Anthropic API key)
+
+### GitHub Mode Workflow
+
+When GitHub Mode is enabled, the generation process changes:
+
+#### Phase 1: Planning & Issue Creation
+
+1. **Generate Product Spec** (Step 1 - same as before)
+2. **Analyze spec and create implementation issues:**
+   ```
+   POST /repos/{owner}/{repo}/issues
+
+   Issues created:
+   #1 - [Setup] Initialize project structure
+   #2 - [Docs] Create README and documentation
+   #3 - [Config] Configure linters and pre-commit hooks
+   #4 - [CI] Set up GitHub Actions workflow
+   #5 - [Feature] Implement user authentication
+   #6 - [Feature] Implement dark mode toggle
+   #7 - [Feature] Add offline support
+   #8 - [Test] Write integration tests
+   ```
+3. **Create milestone** for the project
+4. **Add labels** for categorization (setup, feature, docs, test, etc.)
+
+#### Phase 2: Issue-Driven Implementation
+
+For each issue:
+
+1. **Create feature branch:**
+   ```bash
+   git checkout -b issue-1-initialize-project-structure
+   ```
+
+2. **Implement the task** (Claude generates code)
+
+3. **Run pre-commit hooks locally:**
+   ```bash
+   pre-commit run --all-files
+   ```
+
+4. **If pre-commit fails:**
+   - Claude analyzes errors
+   - Fixes issues
+   - Re-runs hooks
+   - Max 3 attempts before flagging for user
+
+5. **Commit and push:**
+   ```bash
+   git add .
+   git commit -m "feat: initialize project structure
+
+   Closes #1"
+   git push -u origin issue-1-initialize-project-structure
+   ```
+
+6. **Create Pull Request:**
+   ```
+   POST /repos/{owner}/{repo}/pulls
+
+   Title: Initialize project structure
+   Body:
+   ## Summary
+   - Created directory structure per spec
+   - Added placeholder files
+
+   ## Test Plan
+   - [x] Directory structure matches template
+   - [x] All files created successfully
+
+   Closes #1
+   ```
+
+7. **Wait for CI to complete**
+
+8. **If CI fails:**
+   - Fetch CI logs
+   - Claude analyzes and fixes
+   - Push fix commit
+   - Wait for CI again
+   - Max 3 attempts
+
+#### Phase 3: Parallel Execution
+
+SpecInit analyzes issue dependencies and executes in parallel where possible:
+
+```
+                    ┌─────────────┐
+                    │   #1 Setup  │
+                    └──────┬──────┘
+                           │
+           ┌───────────────┼───────────────┐
+           │               │               │
+    ┌──────▼─────┐  ┌──────▼─────┐  ┌──────▼─────┐
+    │  #2 Docs   │  │  #3 Config │  │  #4 CI     │
+    └──────┬─────┘  └──────┬─────┘  └──────┬─────┘
+           │               │               │
+           └───────────────┼───────────────┘
+                           │
+           ┌───────────────┼───────────────┐
+           │               │               │
+    ┌──────▼─────┐  ┌──────▼─────┐  ┌──────▼─────┐
+    │ #5 Feature │  │ #6 Feature │  │ #7 Feature │
+    └──────┬─────┘  └──────┬─────┘  └──────┬─────┘
+           │               │               │
+           └───────────────┼───────────────┘
+                           │
+                    ┌──────▼─────┐
+                    │  #8 Tests  │
+                    └────────────┘
+```
+
+**Parallel execution rules:**
+- Issues on the same level can run simultaneously
+- Each parallel task gets its own branch
+- PRs are created independently
+- Merges happen as soon as CI passes (respecting dependency order)
+
+### YOLO Mode
+
+When YOLO Mode is enabled, SpecInit handles automated code review feedback:
+
+1. **Enable Claude Code reviews** on the repository (or use existing)
+
+2. **After PR creation, wait for reviews:**
+   - CI checks
+   - Claude Code automated review
+
+3. **If review requests changes:**
+   ```
+   Review Comment: "Consider adding input validation for the email field"
+
+   SpecInit Response:
+   - Analyzes comment
+   - Generates fix
+   - Pushes commit: "fix: add email input validation per review"
+   - Re-requests review
+   ```
+
+4. **Recursive resolution:**
+   ```
+   While (PR has unresolved comments OR CI failing):
+     - Fetch latest feedback
+     - Generate fixes
+     - Push commits
+     - If attempts > 5: pause and notify user
+   ```
+
+5. **Auto-merge when ready:**
+   - All CI checks pass
+   - All review comments resolved
+   - No merge conflicts
+   - Merge using squash strategy
+
+### Progress Tracking (GitHub Mode)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Generating: My Awesome App (GitHub Mode)                    │
+│  Repository: github.com/user/my-awesome-app                 │
+│                                                              │
+│  Issues: 8 created │ Milestone: v1.0.0                      │
+│                                                              │
+│  #1 Setup         ✓ Merged     PR #1                        │
+│  #2 Docs          ✓ Merged     PR #2                        │
+│  #3 Config        ✓ Merged     PR #3                        │
+│  #4 CI            ⏳ CI Running PR #4                        │
+│  #5 Auth Feature  🔄 In Review PR #5 (2 comments resolved)  │
+│  #6 Dark Mode     📝 Coding    Branch: issue-6-dark-mode    │
+│  #7 Offline       ⏱ Queued                                  │
+│  #8 Tests         ⏱ Blocked by #5, #6, #7                   │
+│                                                              │
+│  API cost: $2.34 │ Time: 4m 23s │ 5/8 issues complete       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Configuration Storage
+
+GitHub settings stored in `~/.specinit/config.yaml`:
+
+```yaml
+github:
+  token: <stored in keyring, not yaml>
+  default_visibility: private  # or public
+  auto_merge: true  # merge PRs automatically when ready
+  yolo_mode: false  # auto-resolve review feedback
+  max_fix_attempts: 5  # max iterations for YOLO mode
+  parallel_branches: 3  # max concurrent branches
+
+  labels:
+    - name: specinit
+      color: "7057ff"
+      description: "Generated by SpecInit"
+    - name: automated
+      color: "0e8a16"
+      description: "Automated PR"
+```
+
+### API Cost Impact
+
+GitHub Mode increases API costs due to:
+- More granular Claude calls (per-issue instead of per-step)
+- Review resolution iterations
+- CI failure fixes
+
+**Estimated additional cost:**
+- Basic GitHub Mode: +$0.50-1.00 per project
+- YOLO Mode: +$1.00-3.00 per project (depends on review complexity)
+
+**Total with GitHub Mode:** $2.00-6.00 per project
+
+### Security Considerations
+
+1. **Token Storage:**
+   - GitHub PAT stored in OS keyring (same security as Anthropic key)
+   - Never logged or transmitted to SpecInit servers
+   - Scoped to minimum required permissions
+
+2. **Repository Access:**
+   - User explicitly provides repository URL
+   - Token validated before any operations
+   - All operations use user's GitHub identity
+
+3. **YOLO Mode Safeguards:**
+   - Maximum iteration limit (default: 5)
+   - User notified if limit reached
+   - Can be paused/cancelled at any time
+   - Never force-pushes or modifies protected branches
+
+---
+
+## Appendix D: GitHub Mode Issue Templates
+
+### Setup Issue Template
+```markdown
+## Initialize Project Structure
+
+### Description
+Create the initial directory structure and placeholder files for the project.
+
+### Tasks
+- [ ] Create directory tree per template
+- [ ] Add .gitignore
+- [ ] Create plan/ directory with spec files
+- [ ] Add package.json / pyproject.toml
+
+### Acceptance Criteria
+- All directories exist
+- No linter errors on structure
+- plan/product-spec.md present
+
+### Labels
+setup, specinit, automated
+```
+
+### Feature Issue Template
+```markdown
+## Implement: {feature_name}
+
+### Description
+{feature_description from user input}
+
+### User Story
+As {role}, I want to {action}, so that {outcome}
+
+### Tasks
+- [ ] Write tests first (TDD)
+- [ ] Implement feature
+- [ ] Update documentation
+- [ ] Verify all tests pass
+
+### Acceptance Criteria
+- Feature works as described
+- Tests cover happy path and edge cases
+- Documentation updated
+
+### Labels
+feature, specinit, automated
+```
+
+---
+
 Version History
 
 v1.0.0 (December 13, 2025) - Initial specification for MVP release
 v1.0.1 (December 13, 2025) - Updated to use /plan directory for all planning documents; added UI test coverage requirement of 50%
+v1.1.0 (December 13, 2025) - Added GitHub Integration Mode with issue-driven development, parallel execution, and YOLO mode for automated review resolution
 
 
 End of Specification
