@@ -39,9 +39,7 @@ class CostTracker:
 
     steps: dict[str, StepUsage] = field(default_factory=dict)
 
-    def add_usage(
-        self, step_id: str, input_tokens: int, output_tokens: int, model: str
-    ) -> float:
+    def add_usage(self, step_id: str, input_tokens: int, output_tokens: int, model: str) -> float:
         """Add token usage for a step and calculate cost."""
         pricing = MODEL_PRICING.get(model, MODEL_PRICING["default"])
 

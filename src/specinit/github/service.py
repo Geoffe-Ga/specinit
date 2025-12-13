@@ -1,5 +1,6 @@
 """GitHub API service for SpecInit."""
 
+import contextlib
 import re
 import subprocess
 from dataclasses import dataclass
@@ -47,11 +48,13 @@ class GitHubService:
         self.token = token or self.get_token()
         self.session = requests.Session()
         if self.token:
-            self.session.headers.update({
-                "Authorization": f"Bearer {self.token}",
-                "Accept": "application/vnd.github.v3+json",
-                "X-GitHub-Api-Version": "2022-11-28",
-            })
+            self.session.headers.update(
+                {
+                    "Authorization": f"Bearer {self.token}",
+                    "Accept": "application/vnd.github.v3+json",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                }
+            )
 
     @staticmethod
     def get_token() -> str | None:
@@ -69,10 +72,8 @@ class GitHubService:
     @staticmethod
     def delete_token() -> None:
         """Remove GitHub token from keyring."""
-        try:
+        with contextlib.suppress(Exception):
             keyring.delete_password(GITHUB_SERVICE, "token")
-        except Exception:
-            pass
 
     def validate_token(self) -> dict[str, Any]:
         """Validate the token and return user info."""
@@ -151,7 +152,7 @@ class GitHubService:
             number=result["number"],
             title=result["title"],
             body=result["body"],
-            labels=[l["name"] for l in result.get("labels", [])],
+            labels=[label["name"] for label in result.get("labels", [])],
             state=result["state"],
             url=result["html_url"],
         )
@@ -179,7 +180,7 @@ class GitHubService:
                 number=i["number"],
                 title=i["title"],
                 body=i["body"] or "",
-                labels=[l["name"] for l in i.get("labels", [])],
+                labels=[label["name"] for label in i.get("labels", [])],
                 state=i["state"],
                 url=i["html_url"],
             )
@@ -262,9 +263,7 @@ class GitHubService:
 
     def get_pull_request(self, owner: str, repo: str, pr_number: int) -> PullRequest:
         """Get a pull request."""
-        response = self.session.get(
-            f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls/{pr_number}"
-        )
+        response = self.session.get(f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls/{pr_number}")
         response.raise_for_status()
         result = response.json()
 
@@ -287,9 +286,7 @@ class GitHubService:
         response.raise_for_status()
         return response.json()
 
-    def get_pr_reviews(
-        self, owner: str, repo: str, pr_number: int
-    ) -> list[dict[str, Any]]:
+    def get_pr_reviews(self, owner: str, repo: str, pr_number: int) -> list[dict[str, Any]]:
         """Get reviews for a pull request."""
         response = self.session.get(
             f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls/{pr_number}/reviews"
@@ -297,9 +294,7 @@ class GitHubService:
         response.raise_for_status()
         return response.json()
 
-    def get_pr_comments(
-        self, owner: str, repo: str, pr_number: int
-    ) -> list[dict[str, Any]]:
+    def get_pr_comments(self, owner: str, repo: str, pr_number: int) -> list[dict[str, Any]]:
         """Get review comments for a pull request."""
         response = self.session.get(
             f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls/{pr_number}/comments"
@@ -336,9 +331,7 @@ class GitHubService:
         response.raise_for_status()
         return response.json().get("workflow_runs", [])
 
-    def get_workflow_run_logs(
-        self, owner: str, repo: str, run_id: int
-    ) -> str:
+    def get_workflow_run_logs(self, owner: str, repo: str, run_id: int) -> str:
         """Get logs for a workflow run."""
         response = self.session.get(
             f"{GITHUB_API_BASE}/repos/{owner}/{repo}/actions/runs/{run_id}/logs",

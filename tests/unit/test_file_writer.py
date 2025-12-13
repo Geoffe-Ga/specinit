@@ -1,6 +1,5 @@
 """Tests for file writer utilities."""
 
-import pytest
 
 from specinit.generator.file_writer import FileWriter
 

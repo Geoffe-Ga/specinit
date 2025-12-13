@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from specinit.github.service import GitHubService, Issue, PullRequest
+from specinit.github.service import GitHubService
 
 
 class TestGitHubService:
@@ -12,25 +12,19 @@ class TestGitHubService:
 
     def test_parse_repo_url_https(self):
         """Should parse HTTPS GitHub URLs."""
-        owner, repo = GitHubService.parse_repo_url(
-            "https://github.com/user/my-repo"
-        )
+        owner, repo = GitHubService.parse_repo_url("https://github.com/user/my-repo")
         assert owner == "user"
         assert repo == "my-repo"
 
     def test_parse_repo_url_https_with_git(self):
         """Should parse HTTPS URLs with .git suffix."""
-        owner, repo = GitHubService.parse_repo_url(
-            "https://github.com/user/my-repo.git"
-        )
+        owner, repo = GitHubService.parse_repo_url("https://github.com/user/my-repo.git")
         assert owner == "user"
         assert repo == "my-repo"
 
     def test_parse_repo_url_ssh(self):
         """Should parse SSH GitHub URLs."""
-        owner, repo = GitHubService.parse_repo_url(
-            "git@github.com:user/my-repo.git"
-        )
+        owner, repo = GitHubService.parse_repo_url("git@github.com:user/my-repo.git")
         assert owner == "user"
         assert repo == "my-repo"
 
@@ -75,9 +69,7 @@ class TestGitHubService:
         """Should store token in keyring."""
         GitHubService.set_token("new_token")
 
-        mock_keyring.set_password.assert_called_once_with(
-            "specinit-github", "token", "new_token"
-        )
+        mock_keyring.set_password.assert_called_once_with("specinit-github", "token", "new_token")
 
     @patch("specinit.github.service.requests.Session")
     def test_create_issue(self, mock_session_class):

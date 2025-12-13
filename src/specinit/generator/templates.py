@@ -127,9 +127,7 @@ TEMPLATES = {
 class TemplateSelector:
     """Selects the best template based on user requirements."""
 
-    def select(
-        self, platforms: list[str], tech_stack: dict[str, list[str]]
-    ) -> dict[str, Any]:
+    def select(self, platforms: list[str], tech_stack: dict[str, list[str]]) -> dict[str, Any]:
         """Select the best matching template."""
         # Normalize inputs
         platforms_lower = [p.lower() for p in platforms]
@@ -140,10 +138,8 @@ class TemplateSelector:
         best_template = None
         best_score = -1
 
-        for template_id, template in TEMPLATES.items():
-            score = self._score_template(
-                template, platforms_lower, frontend_tech, backend_tech
-            )
+        for _template_id, template in TEMPLATES.items():
+            score = self._score_template(template, platforms_lower, frontend_tech, backend_tech)
             if score > best_score:
                 best_score = score
                 best_template = template

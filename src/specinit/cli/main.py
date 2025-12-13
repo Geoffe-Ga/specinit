@@ -2,7 +2,6 @@
 
 import webbrowser
 from pathlib import Path
-from typing import Optional
 
 import click
 from rich.console import Console
@@ -81,7 +80,7 @@ def init(api_key: str) -> None:
     default=None,
     help="Output directory for the generated project.",
 )
-def new(port: int, no_browser: bool, output_dir: Optional[Path]) -> None:
+def new(port: int, no_browser: bool, output_dir: Path | None) -> None:
     """Start a new project generation.
 
     Opens a web interface to configure your project, then generates
@@ -191,16 +190,17 @@ def config_set(key: str, value: str) -> None:
         raise SystemExit(1)
 
     # Type conversion
+    config_value: str | float | bool = value
     if key == "cost_limit":
         try:
-            value = float(value)
-        except ValueError:
+            config_value = float(value)
+        except ValueError as err:
             console.print("[red]Error:[/red] cost_limit must be a number")
-            raise SystemExit(1)
+            raise SystemExit(1) from err
     elif key == "auto_git_init":
-        value = value.lower() in ("true", "1", "yes")
+        config_value = value.lower() in ("true", "1", "yes")
 
-    cfg.set(key, value)
+    cfg.set(key, config_value)
     console.print(f"[green]Success![/green] Set {key}")
 
 

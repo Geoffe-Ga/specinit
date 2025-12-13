@@ -1,6 +1,8 @@
 """Configuration management for SpecInit."""
 
+import contextlib
 import os
+from datetime import UTC
 from pathlib import Path
 from typing import Any
 
@@ -149,11 +151,11 @@ class ConfigManager:
 
     def update_usage(self, cost: float) -> None:
         """Update usage statistics after project generation."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         self._config["usage"]["projects_created"] += 1
         self._config["usage"]["total_cost"] += cost
-        self._config["usage"]["last_used"] = datetime.now(timezone.utc).isoformat()
+        self._config["usage"]["last_used"] = datetime.now(UTC).isoformat()
         self._save_config()
 
     def reset(self) -> None:
@@ -161,7 +163,5 @@ class ConfigManager:
         self._config = DEFAULT_CONFIG.copy()
         self._save_config()
         # Also remove the API key
-        try:
+        with contextlib.suppress(Exception):
             keyring.delete_password(SPECINIT_SERVICE, "api_key")
-        except Exception:
-            pass

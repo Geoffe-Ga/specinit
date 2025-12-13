@@ -2,11 +2,11 @@
 
 import asyncio
 import subprocess
-import time
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Coroutine
+from typing import Any
 
 from specinit.github.service import (
     GitHubService,
@@ -91,9 +91,7 @@ class GitHubWorkflow:
         ]
 
         for name, color, description in labels:
-            self.github.create_label(
-                self.config.owner, self.config.repo, name, color, description
-            )
+            self.github.create_label(self.config.owner, self.config.repo, name, color, description)
 
     async def create_milestone(self, title: str, description: str = "") -> int:
         """Create a milestone for the project."""
@@ -104,7 +102,7 @@ class GitHubWorkflow:
 
     async def create_issues_from_spec(
         self,
-        spec_content: str,
+        _spec_content: str,
         features: list[str],
         user_story: dict[str, str],
     ) -> list[Issue]:
@@ -112,39 +110,39 @@ class GitHubWorkflow:
         created_issues: list[Issue] = []
 
         # Standard setup issues
-        setup_issues = [
-            {
-                "title": "[Setup] Initialize project structure",
-                "body": self._format_setup_issue_body(
+        setup_issues: list[tuple[str, str, list[str]]] = [
+            (
+                "[Setup] Initialize project structure",
+                self._format_setup_issue_body(
                     "Create the initial directory structure and placeholder files."
                 ),
-                "labels": ["specinit", "automated", "setup"],
-            },
-            {
-                "title": "[Docs] Create README and documentation",
-                "body": self._format_docs_issue_body(),
-                "labels": ["specinit", "automated", "docs"],
-            },
-            {
-                "title": "[Config] Configure linters and pre-commit hooks",
-                "body": self._format_config_issue_body(),
-                "labels": ["specinit", "automated", "setup"],
-            },
-            {
-                "title": "[CI] Set up GitHub Actions workflow",
-                "body": self._format_ci_issue_body(),
-                "labels": ["specinit", "automated", "ci"],
-            },
+                ["specinit", "automated", "setup"],
+            ),
+            (
+                "[Docs] Create README and documentation",
+                self._format_docs_issue_body(),
+                ["specinit", "automated", "docs"],
+            ),
+            (
+                "[Config] Configure linters and pre-commit hooks",
+                self._format_config_issue_body(),
+                ["specinit", "automated", "setup"],
+            ),
+            (
+                "[CI] Set up GitHub Actions workflow",
+                self._format_ci_issue_body(),
+                ["specinit", "automated", "ci"],
+            ),
         ]
 
         # Create setup issues
-        for issue_data in setup_issues:
+        for title, body, labels in setup_issues:
             issue = self.github.create_issue(
                 self.config.owner,
                 self.config.repo,
-                title=issue_data["title"],
-                body=issue_data["body"],
-                labels=issue_data["labels"],
+                title=title,
+                body=body,
+                labels=labels,
                 milestone=self.milestone_number,
             )
             created_issues.append(issue)
@@ -171,9 +169,7 @@ class GitHubWorkflow:
             )
 
         # Create final test issue (depends on features)
-        feature_issue_numbers = [
-            i.number for i in created_issues if "[Feature]" in i.title
-        ]
+        feature_issue_numbers = [i.number for i in created_issues if "[Feature]" in i.title]
         test_issue = self.github.create_issue(
             self.config.owner,
             self.config.repo,
@@ -266,9 +262,7 @@ Configure GitHub Actions for continuous integration.
 - Workflows complete successfully
 """
 
-    def _format_feature_issue_body(
-        self, feature: str, user_story: dict[str, str]
-    ) -> str:
+    def _format_feature_issue_body(self, feature: str, user_story: dict[str, str]) -> str:
         """Format feature issue body."""
         return f"""## Implement: {feature}
 
@@ -478,12 +472,8 @@ Create comprehensive integration tests for all features.
                 elapsed += interval
                 continue
 
-            all_complete = all(
-                run.get("status") == "completed" for run in check_runs
-            )
-            all_success = all(
-                run.get("conclusion") in ("success", "skipped") for run in check_runs
-            )
+            all_complete = all(run.get("status") == "completed" for run in check_runs)
+            all_success = all(run.get("conclusion") in ("success", "skipped") for run in check_runs)
 
             if all_complete:
                 if all_success:
@@ -517,12 +507,8 @@ Create comprehensive integration tests for all features.
 
         while workflow_issue.fix_attempts < self.config.max_fix_attempts:
             # Get reviews and comments
-            reviews = self.github.get_pr_reviews(
-                self.config.owner, self.config.repo, pr.number
-            )
-            comments = self.github.get_pr_comments(
-                self.config.owner, self.config.repo, pr.number
-            )
+            reviews = self.github.get_pr_reviews(self.config.owner, self.config.repo, pr.number)
+            comments = self.github.get_pr_comments(self.config.owner, self.config.repo, pr.number)
 
             # Check if approved
             approved = any(r.get("state") == "APPROVED" for r in reviews)
@@ -531,12 +517,8 @@ Create comprehensive integration tests for all features.
                 return
 
             # Check for change requests
-            changes_requested = any(
-                r.get("state") == "CHANGES_REQUESTED" for r in reviews
-            )
-            unresolved_comments = [
-                c for c in comments if not c.get("resolved", False)
-            ]
+            changes_requested = any(r.get("state") == "CHANGES_REQUESTED" for r in reviews)
+            unresolved_comments = [c for c in comments if not c.get("resolved", False)]
 
             if not changes_requested and not unresolved_comments:
                 # No explicit approval but no blockers either
@@ -601,7 +583,8 @@ Create comprehensive integration tests for all features.
             if not ready_issues:
                 # Check if any issues are still in progress
                 in_progress = [
-                    i for i in self.issues.values()
+                    i
+                    for i in self.issues.values()
                     if i.status not in (IssueStatus.MERGED, IssueStatus.FAILED)
                 ]
                 if not in_progress:
@@ -624,9 +607,7 @@ Create comprehensive integration tests for all features.
         """Get a summary of workflow status."""
         status_counts = {}
         for status in IssueStatus:
-            status_counts[status.value] = sum(
-                1 for i in self.issues.values() if i.status == status
-            )
+            status_counts[status.value] = sum(1 for i in self.issues.values() if i.status == status)
 
         return {
             "total_issues": len(self.issues),

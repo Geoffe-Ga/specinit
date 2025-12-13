@@ -2,8 +2,9 @@
 
 import asyncio
 import time
+from collections.abc import Callable, Coroutine
 from pathlib import Path
-from typing import Any, Callable, Coroutine
+from typing import Any
 
 from anthropic import Anthropic
 
@@ -82,8 +83,7 @@ class GenerationOrchestrator:
             path=str(self.project_path),
             template=template["name"],
             platforms=platforms,
-            tech_stack=list(tech_stack.get("frontend", []))
-            + list(tech_stack.get("backend", [])),
+            tech_stack=list(tech_stack.get("frontend", [])) + list(tech_stack.get("backend", [])),
             status="in_progress",
         )
 
@@ -126,7 +126,7 @@ class GenerationOrchestrator:
                 "generation_time": generation_time,
             }
 
-        except Exception as e:
+        except Exception:
             self.history.update_project(project_id, status="failed")
             raise
 
@@ -174,9 +174,11 @@ class GenerationOrchestrator:
         self.file_writer.write("plan/product-spec.md", spec_content)
         self.file_writer.write(
             "plan/progress-notes.md",
-            f"# Progress Notes\n\n## Step 1: Product Specification\n- Completed\n- Generated comprehensive spec\n",
+            "# Progress Notes\n\n## Step 1: Product Specification\n- Completed\n- Generated comprehensive spec\n",
         )
-        self.file_writer.write("plan/audit-log.md", "# Audit Log\n\n## Step 1 Audit\n- Product spec generated\n")
+        self.file_writer.write(
+            "plan/audit-log.md", "# Audit Log\n\n## Step 1 Audit\n- Product spec generated\n"
+        )
 
     async def _create_structure(self, context: dict[str, Any]) -> None:
         """Step 2: Create project structure."""
@@ -212,7 +214,7 @@ class GenerationOrchestrator:
             f"\n## Step 5: Validation\n- Validated project structure\n- Results: {validation_results}\n",
         )
 
-    async def _setup_dependencies(self, context: dict[str, Any]) -> None:
+    async def _setup_dependencies(self, _context: dict[str, Any]) -> None:
         """Step 6: Set up project dependencies."""
         # This is a local step - just prepare dependency files
         # Actual installation happens when user runs npm install / pip install

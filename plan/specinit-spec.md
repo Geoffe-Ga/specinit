@@ -266,7 +266,7 @@ Terminal Interface:
 [specinit] ✓ Project complete!
 [specinit] Location: ./my-awesome-app
 [specinit] Total cost: $1.87
-[specinit] 
+[specinit]
 [specinit] Next steps:
            cd my-awesome-app
            npm run dev
@@ -643,18 +643,18 @@ Before each phase completion:
 **Good Error Messages:**
 ```
 [specinit] ✗ API key invalid or expired
-[specinit] 
+[specinit]
 [specinit] Please update your API key:
 [specinit]   specinit config set api_key YOUR_KEY
-[specinit] 
+[specinit]
 [specinit] Get an API key: https://console.anthropic.com/
 ```
 ```
 [specinit] ✗ Generation cost would exceed your limit
-[specinit] 
+[specinit]
 [specinit] Estimated cost: $3.20
 [specinit] Your limit: $3.00
-[specinit] 
+[specinit]
 [specinit] Options:
 [specinit]   1. Increase limit: specinit config set cost_limit 5.00
 [specinit]   2. Simplify project (fewer features)
@@ -852,12 +852,12 @@ Updated: After each step completion
 Format:
 
 markdown  # Progress Notes
-  
+
   ## Step 1: Product Specification
   - Started: 2025-12-13 10:00:00
   - Completed: 2025-12-13 10:00:30
   - Notes: Generated comprehensive spec with 5 features
-  
+
   ## Step 2: Project Structure
   - Started: 2025-12-13 10:00:31
   - Completed: 2025-12-13 10:00:45
@@ -870,12 +870,12 @@ Updated: After each step, especially Steps 5-8
 Format:
 
 markdown  # Audit Log
-  
+
   ## Step 1 Audit
   ✓ Product spec includes all user requirements
   ✓ TDD strategy clearly defined
   ✓ Phases are well-structured
-  
+
   ## Step 3 Audit
   ✓ README is comprehensive
   ✓ CONTRIBUTING includes testing workflow

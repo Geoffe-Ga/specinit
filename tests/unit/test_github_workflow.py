@@ -1,7 +1,7 @@
 """Tests for GitHub workflow orchestration."""
 
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -18,7 +18,7 @@ class TestGitHubWorkflow:
     """Tests for GitHubWorkflow."""
 
     @pytest.fixture
-    def mock_github_service(self):
+    def mock_github_service(self) -> MagicMock:
         """Create a mock GitHub service."""
         service = MagicMock()
         service.create_label = MagicMock()
@@ -45,15 +45,13 @@ class TestGitHubWorkflow:
                 {"status": "completed", "conclusion": "success"},
             ]
         }
-        service.get_pr_reviews.return_value = [
-            {"state": "APPROVED"}
-        ]
+        service.get_pr_reviews.return_value = [{"state": "APPROVED"}]
         service.get_pr_comments.return_value = []
         service.merge_pull_request.return_value = True
         return service
 
     @pytest.fixture
-    def github_config(self):
+    def github_config(self) -> GitHubConfig:
         """Create a test GitHub config."""
         return GitHubConfig(
             owner="testuser",
@@ -66,7 +64,12 @@ class TestGitHubWorkflow:
         )
 
     @pytest.fixture
-    def workflow(self, github_config, mock_github_service, temp_dir):
+    def workflow(
+        self,
+        github_config: GitHubConfig,
+        mock_github_service: MagicMock,
+        temp_dir: Path,
+    ) -> GitHubWorkflow:
         """Create a test workflow."""
         return GitHubWorkflow(
             config=github_config,
@@ -75,7 +78,9 @@ class TestGitHubWorkflow:
         )
 
     @pytest.mark.asyncio
-    async def test_setup_repository_creates_labels(self, workflow, mock_github_service):
+    async def test_setup_repository_creates_labels(
+        self, workflow: GitHubWorkflow, mock_github_service: MagicMock
+    ) -> None:
         """Should create labels when setting up repository."""
         await workflow.setup_repository()
 
@@ -83,7 +88,9 @@ class TestGitHubWorkflow:
         assert mock_github_service.create_label.call_count >= 5
 
     @pytest.mark.asyncio
-    async def test_create_milestone(self, workflow, mock_github_service):
+    async def test_create_milestone(
+        self, workflow: GitHubWorkflow, mock_github_service: MagicMock
+    ) -> None:
         """Should create a milestone."""
         milestone_number = await workflow.create_milestone("v1.0.0", "Initial release")
 
@@ -91,10 +98,12 @@ class TestGitHubWorkflow:
         mock_github_service.create_milestone.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_create_issues_from_spec(self, workflow, mock_github_service):
+    async def test_create_issues_from_spec(
+        self, workflow: GitHubWorkflow, _mock_github_service: MagicMock
+    ) -> None:
         """Should create issues based on spec."""
         issues = await workflow.create_issues_from_spec(
-            spec_content="Test spec",
+            _spec_content="Test spec",
             features=["Feature 1", "Feature 2"],
             user_story={"role": "user", "action": "test", "outcome": "result"},
         )
@@ -103,7 +112,7 @@ class TestGitHubWorkflow:
         # 4 setup + 2 features + 1 test = 7 issues
         assert len(issues) >= 5
 
-    def test_get_ready_issues_no_dependencies(self, workflow):
+    def test_get_ready_issues_no_dependencies(self, workflow: GitHubWorkflow) -> None:
         """Should return issues with no dependencies."""
         issue1 = Issue(1, "Issue 1", "", [], "open", "")
         issue2 = Issue(2, "Issue 2", "", [], "open", "")
@@ -115,14 +124,12 @@ class TestGitHubWorkflow:
 
         assert len(ready) == 2
 
-    def test_get_ready_issues_with_dependencies(self, workflow):
+    def test_get_ready_issues_with_dependencies(self, workflow: GitHubWorkflow) -> None:
         """Should not return issues with unmet dependencies."""
         issue1 = Issue(1, "Issue 1", "", [], "open", "")
         issue2 = Issue(2, "Issue 2", "", [], "open", "")
 
-        workflow.issues[1] = WorkflowIssue(
-            issue=issue1, dependencies=[], status=IssueStatus.QUEUED
-        )
+        workflow.issues[1] = WorkflowIssue(issue=issue1, dependencies=[], status=IssueStatus.QUEUED)
         workflow.issues[2] = WorkflowIssue(
             issue=issue2, dependencies=[1], status=IssueStatus.QUEUED
         )
@@ -133,14 +140,12 @@ class TestGitHubWorkflow:
         assert len(ready) == 1
         assert ready[0].issue.number == 1
 
-    def test_get_ready_issues_after_merge(self, workflow):
+    def test_get_ready_issues_after_merge(self, workflow: GitHubWorkflow) -> None:
         """Should return dependent issues after dependency is merged."""
         issue1 = Issue(1, "Issue 1", "", [], "open", "")
         issue2 = Issue(2, "Issue 2", "", [], "open", "")
 
-        workflow.issues[1] = WorkflowIssue(
-            issue=issue1, dependencies=[], status=IssueStatus.MERGED
-        )
+        workflow.issues[1] = WorkflowIssue(issue=issue1, dependencies=[], status=IssueStatus.MERGED)
         workflow.issues[2] = WorkflowIssue(
             issue=issue2, dependencies=[1], status=IssueStatus.QUEUED
         )
@@ -151,21 +156,15 @@ class TestGitHubWorkflow:
         assert len(ready) == 1
         assert ready[0].issue.number == 2
 
-    def test_get_status_summary(self, workflow):
+    def test_get_status_summary(self, workflow: GitHubWorkflow) -> None:
         """Should return correct status summary."""
         issue1 = Issue(1, "Issue 1", "", [], "open", "")
         issue2 = Issue(2, "Issue 2", "", [], "open", "")
         issue3 = Issue(3, "Issue 3", "", [], "open", "")
 
-        workflow.issues[1] = WorkflowIssue(
-            issue=issue1, status=IssueStatus.MERGED
-        )
-        workflow.issues[2] = WorkflowIssue(
-            issue=issue2, status=IssueStatus.IN_PROGRESS
-        )
-        workflow.issues[3] = WorkflowIssue(
-            issue=issue3, status=IssueStatus.QUEUED
-        )
+        workflow.issues[1] = WorkflowIssue(issue=issue1, status=IssueStatus.MERGED)
+        workflow.issues[2] = WorkflowIssue(issue=issue2, status=IssueStatus.IN_PROGRESS)
+        workflow.issues[3] = WorkflowIssue(issue=issue3, status=IssueStatus.QUEUED)
 
         summary = workflow.get_status_summary()
 
@@ -173,7 +172,7 @@ class TestGitHubWorkflow:
         assert summary["merged"] == 1
         assert summary["in_progress"] == 1
 
-    def test_slugify(self, workflow):
+    def test_slugify(self, workflow: GitHubWorkflow) -> None:
         """Should create URL-safe slugs."""
         assert workflow._slugify("[Setup] Initialize project") == "setup-initialize-project"
         assert workflow._slugify("[Feature] Add dark mode!") == "feature-add-dark-mode"
@@ -181,23 +180,26 @@ class TestGitHubWorkflow:
 
     @pytest.mark.asyncio
     async def test_work_on_issue_creates_branch_and_pr(
-        self, workflow, mock_github_service, temp_dir
-    ):
+        self,
+        workflow: GitHubWorkflow,
+        mock_github_service: MagicMock,
+        temp_dir: Path,
+    ) -> None:
         """Should create branch and PR when working on issue."""
         issue = Issue(1, "[Setup] Test Issue", "Body", ["specinit"], "open", "")
         workflow_issue = WorkflowIssue(issue=issue)
         workflow.issues[1] = workflow_issue
 
-        async def mock_implementation(i):
+        async def mock_implementation(_issue: Issue) -> None:
             # Create a test file
             (temp_dir / "test.txt").write_text("test content")
 
-        with patch("specinit.github.workflow.create_branch"):
-            with patch("specinit.github.workflow.push_branch"):
-                with patch("subprocess.run"):
-                    await workflow.work_on_issue(
-                        workflow_issue, mock_implementation
-                    )
+        with (
+            patch("specinit.github.workflow.create_branch"),
+            patch("specinit.github.workflow.push_branch"),
+            patch("subprocess.run"),
+        ):
+            await workflow.work_on_issue(workflow_issue, mock_implementation)
 
         # Should have created a PR
         mock_github_service.create_pull_request.assert_called()
@@ -206,12 +208,20 @@ class TestGitHubWorkflow:
 class TestIssueStatus:
     """Tests for IssueStatus enum."""
 
-    def test_all_statuses_defined(self):
+    def test_all_statuses_defined(self) -> None:
         """All expected statuses should be defined."""
         expected = [
-            "queued", "in_progress", "pr_created", "ci_running",
-            "ci_failed", "in_review", "changes_requested",
-            "approved", "merged", "blocked", "failed"
+            "queued",
+            "in_progress",
+            "pr_created",
+            "ci_running",
+            "ci_failed",
+            "in_review",
+            "changes_requested",
+            "approved",
+            "merged",
+            "blocked",
+            "failed",
         ]
 
         for status in expected:
@@ -221,7 +231,7 @@ class TestIssueStatus:
 class TestWorkflowIssue:
     """Tests for WorkflowIssue dataclass."""
 
-    def test_default_values(self):
+    def test_default_values(self) -> None:
         """Should have correct default values."""
         issue = Issue(1, "Test", "", [], "open", "")
         workflow_issue = WorkflowIssue(issue=issue)

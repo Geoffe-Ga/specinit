@@ -1,7 +1,6 @@
 """File writing utilities for generated content."""
 
 import re
-import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -74,7 +73,7 @@ class FileWriter:
 
             self.write(file_path, file_content + "\n")
 
-    def write_gitignore(self, tech_stack: dict[str, list[str]]) -> None:
+    def write_gitignore(self, _tech_stack: dict[str, list[str]]) -> None:
         """Generate and write a .gitignore file based on tech stack."""
         gitignore_content = """# Dependencies
 node_modules/
@@ -152,10 +151,12 @@ out/
 
     def validate_structure(self, template: dict[str, Any]) -> dict[str, Any]:
         """Validate that the project structure matches the template."""
-        results = {
+        missing_dirs: list[str] = []
+        missing_files: list[str] = []
+        results: dict[str, Any] = {
             "valid": True,
-            "missing_dirs": [],
-            "missing_files": [],
+            "missing_dirs": missing_dirs,
+            "missing_files": missing_files,
         }
 
         # Check required directories from template
@@ -163,13 +164,13 @@ out/
             full_path = self.project_path / dir_path
             if not full_path.exists():
                 results["valid"] = False
-                results["missing_dirs"].append(dir_path)
+                missing_dirs.append(dir_path)
 
         # Check for plan directory (always required)
         plan_path = self.project_path / "plan"
         if not plan_path.exists():
             results["valid"] = False
-            results["missing_dirs"].append("plan/")
+            missing_dirs.append("plan/")
 
         # Check for required plan files
         required_plan_files = [
@@ -181,6 +182,6 @@ out/
             full_path = self.project_path / file_path
             if not full_path.exists():
                 results["valid"] = False
-                results["missing_files"].append(file_path)
+                missing_files.append(file_path)
 
         return results

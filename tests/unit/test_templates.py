@@ -1,8 +1,7 @@
 """Tests for template selection."""
 
-import pytest
 
-from specinit.generator.templates import TemplateSelector, TEMPLATES
+from specinit.generator.templates import TEMPLATES, TemplateSelector
 
 
 class TestTemplateSelector:

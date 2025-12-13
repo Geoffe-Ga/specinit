@@ -1,7 +1,8 @@
 """Integration tests for project generation."""
 
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from typing import Any
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -12,7 +13,7 @@ class TestGenerationOrchestrator:
     """Integration tests for GenerationOrchestrator."""
 
     @pytest.fixture
-    def mock_claude_response(self):
+    def mock_claude_response(self) -> MagicMock:
         """Create a mock Claude API response."""
         mock_response = MagicMock()
         mock_response.content = [MagicMock(text="# Product Spec\n\nGenerated content")]
@@ -21,7 +22,12 @@ class TestGenerationOrchestrator:
         return mock_response
 
     @pytest.mark.asyncio
-    async def test_creates_plan_directory(self, temp_dir, mock_claude_response, monkeypatch):
+    async def test_creates_plan_directory(
+        self,
+        temp_dir: Path,
+        mock_claude_response: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         """Generation should create plan/ directory with required files."""
         # Mock dependencies
         monkeypatch.setenv("HOME", str(temp_dir))
@@ -82,7 +88,12 @@ class TestGenerationOrchestrator:
             assert "generation_time" in result
 
     @pytest.mark.asyncio
-    async def test_tracks_costs(self, temp_dir, mock_claude_response, monkeypatch):
+    async def test_tracks_costs(
+        self,
+        temp_dir: Path,
+        mock_claude_response: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         """Generation should track API costs."""
         monkeypatch.setenv("HOME", str(temp_dir))
 
@@ -136,7 +147,12 @@ class TestGenerationOrchestrator:
             mock_history_instance.update_project.assert_called()
 
     @pytest.mark.asyncio
-    async def test_progress_callback_called(self, temp_dir, mock_claude_response, monkeypatch):
+    async def test_progress_callback_called(
+        self,
+        temp_dir: Path,
+        mock_claude_response: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         """Progress callback should be called for each step."""
         monkeypatch.setenv("HOME", str(temp_dir))
 
@@ -167,9 +183,11 @@ class TestGenerationOrchestrator:
             )
 
             # Track progress calls
-            progress_calls = []
+            progress_calls: list[tuple[str, str]] = []
 
-            async def track_progress(step, status, details):
+            async def track_progress(
+                step: str, status: str, _details: dict[str, Any] | None
+            ) -> None:
                 progress_calls.append((step, status))
 
             await orchestrator.generate(

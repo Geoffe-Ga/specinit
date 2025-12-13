@@ -1,7 +1,7 @@
 """Project history management using SQLite."""
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +21,8 @@ class HistoryManager:
         HISTORY_DIR.mkdir(parents=True, exist_ok=True)
 
         with sqlite3.connect(HISTORY_DB) as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS projects (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     name TEXT NOT NULL,
@@ -34,7 +35,8 @@ class HistoryManager:
                     generation_time_seconds REAL,
                     status TEXT DEFAULT 'completed'
                 )
-            """)
+            """
+            )
             conn.commit()
 
     def add_project(
@@ -64,12 +66,14 @@ class HistoryManager:
                     ",".join(platforms or []),
                     ",".join(tech_stack or []),
                     cost,
-                    datetime.now(timezone.utc).isoformat(),
+                    datetime.now(UTC).isoformat(),
                     generation_time,
                     status,
                 ),
             )
             conn.commit()
+            # lastrowid is only None for non-INSERT statements
+            assert cursor.lastrowid is not None
             return cursor.lastrowid
 
     def update_project(self, project_id: int, **kwargs: Any) -> None:
@@ -80,7 +84,7 @@ class HistoryManager:
         if not updates:
             return
 
-        set_clause = ", ".join(f"{k} = ?" for k in updates.keys())
+        set_clause = ", ".join(f"{k} = ?" for k in updates)
         values = list(updates.values()) + [project_id]
 
         with sqlite3.connect(HISTORY_DB) as conn:

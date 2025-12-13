@@ -1,8 +1,7 @@
 """Tests for cost tracking."""
 
-import pytest
 
-from specinit.generator.cost import CostTracker, MODEL_PRICING
+from specinit.generator.cost import CostTracker
 
 
 class TestCostTracker:
