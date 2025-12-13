@@ -1,6 +1,5 @@
 """Tests for file writer utilities."""
 
-
 from specinit.generator.file_writer import FileWriter
 
 

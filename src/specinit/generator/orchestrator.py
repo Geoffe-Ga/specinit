@@ -151,19 +151,26 @@ class GenerationOrchestrator:
 
     async def _call_claude(self, prompt: str, step_id: str) -> str:
         """Make a Claude API call and track costs."""
-        response = await asyncio.to_thread(
-            self.client.messages.create,
-            model=self.model,
-            max_tokens=8192,
-            messages=[{"role": "user", "content": prompt}],
-        )
+
+        def create_message() -> Any:
+            return self.client.messages.create(
+                model=self.model,
+                max_tokens=8192,
+                messages=[{"role": "user", "content": prompt}],
+            )
+
+        response = await asyncio.to_thread(create_message)
 
         # Track costs
         input_tokens = response.usage.input_tokens
         output_tokens = response.usage.output_tokens
         self.cost_tracker.add_usage(step_id, input_tokens, output_tokens, self.model)
 
-        return response.content[0].text
+        # Extract text from the first content block
+        content_block = response.content[0]
+        if hasattr(content_block, "text"):
+            return content_block.text
+        raise ValueError(f"Unexpected content block type: {type(content_block)}")
 
     async def _generate_product_spec(self, context: dict[str, Any]) -> None:
         """Step 1: Generate product specification."""
@@ -241,10 +248,10 @@ class GenerationOrchestrator:
 
         commit_message = f"""Initial commit: {self.project_name}
 
-User Story: As {user_story['role']}, I want to {user_story['action']}, so that {user_story['outcome']}
+User Story: As {user_story["role"]}, I want to {user_story["action"]}, so that {user_story["outcome"]}
 
 Features:
-{chr(10).join(f'- {f}' for f in features)}
+{chr(10).join(f"- {f}" for f in features)}
 
 Generated with SpecInit
 """

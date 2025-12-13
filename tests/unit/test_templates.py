@@ -1,6 +1,5 @@
 """Tests for template selection."""
 
-
 from specinit.generator.templates import TEMPLATES, TemplateSelector
 
 

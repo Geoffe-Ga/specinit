@@ -270,7 +270,7 @@ Configure GitHub Actions for continuous integration.
 Implement the {feature} feature.
 
 ### User Story
-As {user_story.get('role', 'a user')}, I want to {user_story.get('action', 'use this feature')}, so that {user_story.get('outcome', 'I can achieve my goal')}.
+As {user_story.get("role", "a user")}, I want to {user_story.get("action", "use this feature")}, so that {user_story.get("outcome", "I can achieve my goal")}.
 
 ### Tasks
 - [ ] Write tests first (TDD)

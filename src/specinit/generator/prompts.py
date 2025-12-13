@@ -36,25 +36,25 @@ All planning and specification documents should be saved in the /plan/ directory
 The user wants to create a new software project with these requirements:
 
 ## Project Name
-{context['project_name']}
+{context["project_name"]}
 
 ## Target Platforms
-{', '.join(platforms)}
+{", ".join(platforms)}
 
 ## User Story
-As {user_story['role']}, I want to {user_story['action']}, so that {user_story['outcome']}
+As {user_story["role"]}, I want to {user_story["action"]}, so that {user_story["outcome"]}
 
 ## Features
-{chr(10).join(f'- {f}' for f in features)}
+{chr(10).join(f"- {f}" for f in features)}
 
 ## Tech Stack
-- Frontend: {', '.join(tech_stack.get('frontend', ['N/A']))}
-- Backend: {', '.join(tech_stack.get('backend', ['N/A']))}
-- Database: {', '.join(tech_stack.get('database', ['N/A']))}
-- Tools: {', '.join(tech_stack.get('tools', ['N/A']))}
+- Frontend: {", ".join(tech_stack.get("frontend", ["N/A"]))}
+- Backend: {", ".join(tech_stack.get("backend", ["N/A"]))}
+- Database: {", ".join(tech_stack.get("database", ["N/A"]))}
+- Tools: {", ".join(tech_stack.get("tools", ["N/A"]))}
 
 ## UX Aesthetics
-{', '.join(aesthetics)}
+{", ".join(aesthetics)}
 
 # Your Task
 Generate a comprehensive product specification document in Markdown format.
@@ -88,12 +88,12 @@ Output ONLY the markdown content, no additional commentary."""
         return f"""{self.BASE_SYSTEM}
 
 # Context
-Create the project structure for: {context['project_name']}
+Create the project structure for: {context["project_name"]}
 
-Template: {template['name']}
+Template: {template["name"]}
 Tech Stack:
-- Frontend: {', '.join(context['tech_stack'].get('frontend', []))}
-- Backend: {', '.join(context['tech_stack'].get('backend', []))}
+- Frontend: {", ".join(context["tech_stack"].get("frontend", []))}
+- Backend: {", ".join(context["tech_stack"].get("backend", []))}
 
 # Your Task
 Generate a bash script that creates all necessary directories and empty files for this project.
@@ -122,9 +122,9 @@ No markdown code blocks, just the raw script."""
         return f"""{self.BASE_SYSTEM}
 
 # Context
-Project: {context['project_name']}
-User Story: As {user_story['role']}, I want to {user_story['action']}, so that {user_story['outcome']}
-Features: {', '.join(context['features'])}
+Project: {context["project_name"]}
+User Story: As {user_story["role"]}, I want to {user_story["action"]}, so that {user_story["outcome"]}
+Features: {", ".join(context["features"])}
 
 # Your Task
 Generate comprehensive documentation files.
@@ -179,8 +179,8 @@ Output ONLY the file contents in this format, no additional commentary."""
         return f"""{self.BASE_SYSTEM}
 
 # Context
-Project: {context['project_name']}
-Tech Stack: {', '.join(all_tech)}
+Project: {context["project_name"]}
+Tech Stack: {", ".join(all_tech)}
 
 # Your Task
 Generate developer tooling configuration files.
@@ -225,8 +225,8 @@ Output ONLY the file contents in this format, no additional commentary."""
         return f"""{self.BASE_SYSTEM}
 
 # Context
-Project: {context['project_name']}
-Features: {', '.join(context['features'])}
+Project: {context["project_name"]}
+Features: {", ".join(context["features"])}
 
 ## Product Specification
 {spec_content[:8000]}  # Truncate if too long

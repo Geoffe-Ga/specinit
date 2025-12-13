@@ -1,6 +1,5 @@
 """Tests for cost tracking."""
 
-
 from specinit.generator.cost import CostTracker
 
 
