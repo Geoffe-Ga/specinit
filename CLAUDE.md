@@ -18,18 +18,22 @@
 
 ### Use Scripts for Consistency
 
-**Always use the provided scripts in `scripts/` for running tests and checks.** This ensures consistency between local development, pre-commit hooks, and CI.
+**Always use the provided scripts in `scripts/` or `pre-commit` for running tests and checks.** This ensures consistency between local development, pre-commit hooks, and CI.
 
 ```bash
-# Use these scripts
-./scripts/lint.sh      # Run all linting (ruff check, ruff format --check, mypy)
-./scripts/test.sh      # Run all tests with coverage
-./scripts/check.sh     # Run both lint and test
+# Use these commands (in order of preference)
+pre-commit run --all-files     # Best: runs all checks as CI would
+./scripts/lint.sh              # Run all linting (ruff check, ruff format --check, mypy)
+./scripts/test.sh              # Run all tests with coverage
+./scripts/check.sh             # Run both lint and test
 
 # Do NOT run these directly (use scripts instead)
-pytest tests/          # Use ./scripts/test.sh
-ruff check src/        # Use ./scripts/lint.sh
+python -m ruff check src/      # Use ./scripts/lint.sh or pre-commit
+python -m mypy src/            # Use ./scripts/lint.sh or pre-commit
+pytest tests/                  # Use ./scripts/test.sh
 ```
+
+**Why?** Running tools directly via `python -m` or bare commands bypasses the virtual environment activation and may use system Python. Scripts ensure the correct environment is used.
 
 ## Overview
 
@@ -102,9 +106,12 @@ pre-commit run --all-files
 
 ## Test Coverage Targets
 
-- CLI commands: 80%+
+- Overall: 90%+
+- CLI commands: 90%+
 - Generator functions: 90%+
-- Config management: 90%+
+- Config/Storage: 90%+
+- GitHub integration: 85%+
+- Server/API: 75%+
 - UI components: 50%+
 
 ## Dependencies
