@@ -32,3 +32,14 @@ repos:
         types: [python]
         pass_filenames: false
         args: [src, --ignore-missing-imports]
+
+  # Use local shellcheck if available (install with: brew install shellcheck)
+  - repo: local
+    hooks:
+      - id: shellcheck
+        name: shellcheck
+        entry: shellcheck
+        language: system
+        types: [shell]
+        args: ["-x", "-S", "warning"]  # Follow source statements, only warn on warnings+
+        files: ^scripts/
