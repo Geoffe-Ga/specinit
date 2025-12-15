@@ -132,3 +132,109 @@ class TestConfigCommands:
 
         assert result.exit_code == 1
         assert "Unknown configuration key" in result.output
+
+    def test_config_set_invalid_cost_limit(self, runner: CliRunner, _mock_home: Path) -> None:
+        """Config set should reject non-numeric cost_limit."""
+        result = runner.invoke(cli, ["config", "set", "cost_limit", "not-a-number"])
+
+        assert result.exit_code == 1
+        assert "cost_limit must be a number" in result.output
+
+    def test_config_set_auto_git_init(self, runner: CliRunner, _mock_home: Path) -> None:
+        """Config set should convert boolean strings for auto_git_init."""
+        with patch("specinit.cli.main.ConfigManager") as mock_config:
+            mock_instance = MagicMock()
+            mock_config.return_value = mock_instance
+
+            result = runner.invoke(cli, ["config", "set", "auto_git_init", "true"])
+
+            assert result.exit_code == 0
+            mock_instance.set.assert_called_once_with("auto_git_init", True)
+
+    def test_config_show_without_api_key(self, runner: CliRunner, _mock_home: Path) -> None:
+        """Config show should indicate when API key is not set."""
+        with patch("specinit.cli.main.ConfigManager") as mock_config:
+            mock_instance = MagicMock()
+            mock_instance.get_all.return_value = {
+                "api_key": "",  # Empty API key
+                "model": "claude-sonnet-4-5-20250929",
+                "cost_limit": 5.0,
+                "auto_open_editor": "none",
+                "auto_git_init": True,
+                "projects_created": 0,
+                "total_cost": 0.0,
+            }
+            mock_config.return_value = mock_instance
+
+            result = runner.invoke(cli, ["config", "show"])
+
+            assert result.exit_code == 0
+            assert "Not set" in result.output
+
+    def test_config_reset(self, runner: CliRunner, _mock_home: Path) -> None:
+        """Config reset should reset settings with confirmation."""
+        with patch("specinit.cli.main.ConfigManager") as mock_config:
+            mock_instance = MagicMock()
+            mock_config.return_value = mock_instance
+
+            result = runner.invoke(cli, ["config", "reset", "--yes"])
+
+            assert result.exit_code == 0
+            assert "reset to defaults" in result.output
+            mock_instance.reset.assert_called_once()
+
+
+class TestNewCommandWithOptions:
+    """Tests for new command with various options."""
+
+    def test_new_with_default_output_dir(self, runner: CliRunner, _mock_home: Path) -> None:
+        """New command should use current directory when no output specified."""
+        with (
+            patch("specinit.cli.main.ConfigManager") as mock_config,
+            patch("specinit.cli.main.start_server") as mock_server,
+            patch("specinit.cli.main.webbrowser"),
+        ):
+            mock_instance = MagicMock()
+            mock_instance.get_api_key.return_value = "sk-ant-test-key"
+            mock_config.return_value = mock_instance
+
+            result = runner.invoke(cli, ["new", "--no-browser"])
+
+            assert result.exit_code == 0
+            mock_server.assert_called_once()
+            # Output dir should be cwd
+            call_args = mock_server.call_args
+            assert call_args.kwargs["output_dir"] == Path.cwd()
+
+    def test_new_opens_browser_by_default(self, runner: CliRunner, _mock_home: Path) -> None:
+        """New command should open browser by default."""
+        with (
+            patch("specinit.cli.main.ConfigManager") as mock_config,
+            patch("specinit.cli.main.start_server"),
+            patch("specinit.cli.main.webbrowser") as mock_browser,
+        ):
+            mock_instance = MagicMock()
+            mock_instance.get_api_key.return_value = "sk-ant-test-key"
+            mock_config.return_value = mock_instance
+
+            result = runner.invoke(cli, ["new"])
+
+            assert result.exit_code == 0
+            mock_browser.open.assert_called_once_with("http://localhost:8765")
+
+    def test_new_with_custom_port(self, runner: CliRunner, _mock_home: Path) -> None:
+        """New command should use specified port."""
+        with (
+            patch("specinit.cli.main.ConfigManager") as mock_config,
+            patch("specinit.cli.main.start_server") as mock_server,
+            patch("specinit.cli.main.webbrowser"),
+        ):
+            mock_instance = MagicMock()
+            mock_instance.get_api_key.return_value = "sk-ant-test-key"
+            mock_config.return_value = mock_instance
+
+            result = runner.invoke(cli, ["new", "--port", "9000", "--no-browser"])
+
+            assert result.exit_code == 0
+            call_args = mock_server.call_args
+            assert call_args.kwargs["port"] == 9000

@@ -1,6 +1,8 @@
 """Tests for GitHub workflow orchestration."""
 
+import subprocess
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -242,3 +244,364 @@ class TestWorkflowIssue:
         assert workflow_issue.dependencies == []
         assert workflow_issue.fix_attempts == 0
         assert workflow_issue.error_message == ""
+
+
+class TestRunPrecommit:
+    """Tests for _run_precommit method."""
+
+    @pytest.fixture
+    def workflow_with_project(self, temp_dir: Path) -> GitHubWorkflow:
+        """Create workflow with a project path."""
+        config = GitHubConfig(owner="testuser", repo="testrepo")
+        service = MagicMock()
+        return GitHubWorkflow(config=config, project_path=temp_dir, github_service=service)
+
+    @pytest.mark.asyncio
+    async def test_precommit_success(self, workflow_with_project: GitHubWorkflow) -> None:
+        """Should return True when pre-commit succeeds."""
+        issue = Issue(1, "Test", "", [], "open", "")
+        workflow_issue = WorkflowIssue(issue=issue)
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
+            result = await workflow_with_project._run_precommit(workflow_issue)
+
+        assert result is True
+        assert workflow_issue.fix_attempts == 0
+
+    @pytest.mark.asyncio
+    async def test_precommit_failure(self, workflow_with_project: GitHubWorkflow) -> None:
+        """Should return False and increment attempts on failure."""
+        issue = Issue(1, "Test", "", [], "open", "")
+        workflow_issue = WorkflowIssue(issue=issue)
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=1,
+                stdout="Linting failed",
+                stderr="Error in file.py",
+            )
+            result = await workflow_with_project._run_precommit(workflow_issue)
+
+        assert result is False
+        assert workflow_issue.fix_attempts == 1
+        assert "Linting failed" in workflow_issue.error_message
+
+
+class TestWaitForCI:
+    """Tests for _wait_for_ci method."""
+
+    @pytest.fixture
+    def workflow_with_mocks(self, temp_dir: Path) -> tuple[GitHubWorkflow, MagicMock]:
+        """Create workflow with mock service."""
+        config = GitHubConfig(owner="testuser", repo="testrepo")
+        service = MagicMock()
+        workflow = GitHubWorkflow(config=config, project_path=temp_dir, github_service=service)
+        return workflow, service
+
+    @pytest.mark.asyncio
+    async def test_ci_passes_immediately(
+        self, workflow_with_mocks: tuple[GitHubWorkflow, MagicMock]
+    ) -> None:
+        """Should set IN_REVIEW when CI passes."""
+        workflow, service = workflow_with_mocks
+        service.get_pr_checks.return_value = {
+            "check_runs": [{"status": "completed", "conclusion": "success"}]
+        }
+
+        issue = Issue(1, "Test", "", [], "open", "")
+        pr = PullRequest(1, "PR", "", "branch", "main", "open", "")
+        workflow_issue = WorkflowIssue(issue=issue, pr=pr, branch_name="branch")
+
+        await workflow._wait_for_ci(workflow_issue)
+
+        assert workflow_issue.status == IssueStatus.IN_REVIEW
+
+    @pytest.mark.asyncio
+    async def test_ci_fails(self, workflow_with_mocks: tuple[GitHubWorkflow, MagicMock]) -> None:
+        """Should set CI_FAILED when checks fail."""
+        workflow, service = workflow_with_mocks
+        service.get_pr_checks.return_value = {
+            "check_runs": [{"status": "completed", "conclusion": "failure"}]
+        }
+
+        issue = Issue(1, "Test", "", [], "open", "")
+        pr = PullRequest(1, "PR", "", "branch", "main", "open", "")
+        workflow_issue = WorkflowIssue(issue=issue, pr=pr, branch_name="branch")
+
+        await workflow._wait_for_ci(workflow_issue)
+
+        assert workflow_issue.status == IssueStatus.CI_FAILED
+
+    @pytest.mark.asyncio
+    async def test_ci_no_pr(self, workflow_with_mocks: tuple[GitHubWorkflow, MagicMock]) -> None:
+        """Should return early when no PR."""
+        workflow, _service = workflow_with_mocks
+
+        issue = Issue(1, "Test", "", [], "open", "")
+        workflow_issue = WorkflowIssue(issue=issue, pr=None)
+
+        await workflow._wait_for_ci(workflow_issue)
+
+        # Status is set to CI_RUNNING before PR check, then returns
+        assert workflow_issue.status == IssueStatus.CI_RUNNING
+
+    @pytest.mark.asyncio
+    async def test_ci_with_progress_callback(
+        self, workflow_with_mocks: tuple[GitHubWorkflow, MagicMock]
+    ) -> None:
+        """Should call progress callback when CI is running."""
+        workflow, service = workflow_with_mocks
+        service.get_pr_checks.return_value = {
+            "check_runs": [{"status": "completed", "conclusion": "success"}]
+        }
+
+        callback_calls: list[tuple] = []
+
+        async def mock_callback(issue_id: str, status: str, data: dict | None) -> None:
+            callback_calls.append((issue_id, status, data))
+
+        issue = Issue(1, "Test", "", [], "open", "")
+        pr = PullRequest(1, "PR", "", "branch", "main", "open", "")
+        workflow_issue = WorkflowIssue(issue=issue, pr=pr, branch_name="branch")
+
+        await workflow._wait_for_ci(workflow_issue, mock_callback)
+
+        assert len(callback_calls) >= 1
+        assert callback_calls[0][1] == "ci_running"
+
+
+class TestHandleReviews:
+    """Tests for _handle_reviews method."""
+
+    @pytest.fixture
+    def workflow_for_reviews(self, temp_dir: Path) -> tuple[GitHubWorkflow, MagicMock]:
+        """Create workflow configured for review handling."""
+        config = GitHubConfig(
+            owner="testuser",
+            repo="testrepo",
+            yolo_mode=True,
+            max_fix_attempts=2,
+        )
+        service = MagicMock()
+        workflow = GitHubWorkflow(config=config, project_path=temp_dir, github_service=service)
+        return workflow, service
+
+    @pytest.mark.asyncio
+    async def test_review_approved(
+        self, workflow_for_reviews: tuple[GitHubWorkflow, MagicMock]
+    ) -> None:
+        """Should set APPROVED when review is approved."""
+        workflow, service = workflow_for_reviews
+        service.get_pr_reviews.return_value = [{"state": "APPROVED"}]
+        service.get_pr_comments.return_value = []
+
+        issue = Issue(1, "Test", "", [], "open", "")
+        pr = PullRequest(1, "PR", "", "branch", "main", "open", "")
+        workflow_issue = WorkflowIssue(issue=issue, pr=pr, branch_name="branch")
+
+        async def mock_impl(_issue: Issue) -> None:
+            pass
+
+        await workflow._handle_reviews(workflow_issue, mock_impl)
+
+        assert workflow_issue.status == IssueStatus.APPROVED
+
+    @pytest.mark.asyncio
+    async def test_review_no_explicit_approval_no_blockers(
+        self, workflow_for_reviews: tuple[GitHubWorkflow, MagicMock]
+    ) -> None:
+        """Should set APPROVED when no blockers even without explicit approval."""
+        workflow, service = workflow_for_reviews
+        service.get_pr_reviews.return_value = []  # No reviews
+        service.get_pr_comments.return_value = []  # No comments
+
+        issue = Issue(1, "Test", "", [], "open", "")
+        pr = PullRequest(1, "PR", "", "branch", "main", "open", "")
+        workflow_issue = WorkflowIssue(issue=issue, pr=pr, branch_name="branch")
+
+        async def mock_impl(_issue: Issue) -> None:
+            pass
+
+        await workflow._handle_reviews(workflow_issue, mock_impl)
+
+        assert workflow_issue.status == IssueStatus.APPROVED
+
+    @pytest.mark.asyncio
+    async def test_review_no_pr(
+        self, workflow_for_reviews: tuple[GitHubWorkflow, MagicMock]
+    ) -> None:
+        """Should return early when no PR exists."""
+        workflow, _service = workflow_for_reviews
+
+        issue = Issue(1, "Test", "", [], "open", "")
+        workflow_issue = WorkflowIssue(issue=issue, pr=None)
+
+        async def mock_impl(_issue: Issue) -> None:
+            pass
+
+        await workflow._handle_reviews(workflow_issue, mock_impl)
+
+        # Status should remain unchanged
+        assert workflow_issue.status == IssueStatus.QUEUED
+
+
+class TestRunParallel:
+    """Tests for run_parallel method."""
+
+    @pytest.mark.asyncio
+    async def test_run_parallel_no_issues(self, temp_dir: Path) -> None:
+        """Should complete immediately with no issues."""
+        config = GitHubConfig(owner="testuser", repo="testrepo")
+        service = MagicMock()
+        workflow = GitHubWorkflow(config=config, project_path=temp_dir, github_service=service)
+
+        async def mock_impl(_issue: Issue) -> None:
+            pass
+
+        # Should complete without error
+        await workflow.run_parallel(mock_impl)
+
+    @pytest.mark.asyncio
+    async def test_run_parallel_gets_ready_issues(self, temp_dir: Path) -> None:
+        """Should get ready issues and attempt to process them."""
+        config = GitHubConfig(owner="testuser", repo="testrepo", parallel_branches=2)
+        service = MagicMock()
+        workflow = GitHubWorkflow(config=config, project_path=temp_dir, github_service=service)
+
+        # Add issues - one merged (not ready), one queued with unsatisfied dep
+        issue1 = Issue(1, "Done", "", [], "open", "")
+        issue2 = Issue(2, "Pending", "", [], "open", "")
+        workflow.issues[1] = WorkflowIssue(issue=issue1, dependencies=[], status=IssueStatus.MERGED)
+        workflow.issues[2] = WorkflowIssue(
+            issue=issue2, dependencies=[1], status=IssueStatus.QUEUED
+        )
+
+        # Mock work_on_issue to avoid slow async operations
+        async def mock_work(_issue: WorkflowIssue, _impl: Any, _callback: Any = None) -> None:
+            _issue.status = IssueStatus.MERGED
+
+        async def mock_impl(_issue: Issue) -> None:
+            pass
+
+        with patch.object(workflow, "work_on_issue", mock_work):
+            await workflow.run_parallel(mock_impl)
+
+        # Issue 2 should have been processed (its dep issue 1 is merged)
+        assert workflow.issues[2].status == IssueStatus.MERGED
+
+
+class TestWorkOnIssueEdgeCases:
+    """Tests for work_on_issue edge cases."""
+
+    @pytest.fixture
+    def workflow_for_edge_cases(self, temp_dir: Path) -> tuple[GitHubWorkflow, MagicMock]:
+        """Create workflow for testing edge cases."""
+        config = GitHubConfig(
+            owner="testuser",
+            repo="testrepo",
+            auto_merge=True,
+            yolo_mode=True,
+            max_fix_attempts=1,
+        )
+        service = MagicMock()
+        service.create_pull_request.return_value = PullRequest(
+            1, "PR", "", "branch", "main", "open", ""
+        )
+        service.get_pr_checks.return_value = {
+            "check_runs": [{"status": "completed", "conclusion": "success"}]
+        }
+        service.get_pr_reviews.return_value = [{"state": "APPROVED"}]
+        service.get_pr_comments.return_value = []
+        service.merge_pull_request.return_value = True
+
+        workflow = GitHubWorkflow(config=config, project_path=temp_dir, github_service=service)
+        return workflow, service
+
+    @pytest.mark.asyncio
+    async def test_work_on_issue_branch_exists(
+        self, workflow_for_edge_cases: tuple[GitHubWorkflow, MagicMock]
+    ) -> None:
+        """Should checkout existing branch if create fails."""
+        workflow, _service = workflow_for_edge_cases
+
+        issue = Issue(1, "[Test] Issue", "", [], "open", "")
+        workflow_issue = WorkflowIssue(issue=issue)
+        workflow.issues[1] = workflow_issue
+
+        async def mock_impl(_issue: Issue) -> None:
+            pass
+
+        with (
+            patch("specinit.github.workflow.create_branch") as mock_create,
+            patch("specinit.github.workflow.push_branch"),
+            patch("subprocess.run") as mock_run,
+        ):
+            # First call to create_branch raises CalledProcessError
+            mock_create.side_effect = subprocess.CalledProcessError(1, "git")
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+            await workflow.work_on_issue(workflow_issue, mock_impl)
+
+        # Should have called git checkout for the existing branch
+        checkout_calls = [c for c in mock_run.call_args_list if "checkout" in str(c)]
+        assert len(checkout_calls) > 0
+
+    @pytest.mark.asyncio
+    async def test_work_on_issue_with_progress_callback(
+        self, workflow_for_edge_cases: tuple[GitHubWorkflow, MagicMock]
+    ) -> None:
+        """Should call progress callback at various stages."""
+        workflow, _service = workflow_for_edge_cases
+
+        issue = Issue(1, "[Test] Issue", "", [], "open", "")
+        workflow_issue = WorkflowIssue(issue=issue)
+        workflow.issues[1] = workflow_issue
+
+        callback_calls: list[tuple] = []
+
+        async def mock_callback(issue_id: str, status: str, data: dict | None) -> None:
+            callback_calls.append((issue_id, status, data))
+
+        async def mock_impl(_issue: Issue) -> None:
+            pass
+
+        with (
+            patch("specinit.github.workflow.create_branch"),
+            patch("specinit.github.workflow.push_branch"),
+            patch("subprocess.run") as mock_run,
+        ):
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+            await workflow.work_on_issue(workflow_issue, mock_impl, mock_callback)
+
+        # Should have called callback for in_progress and other stages
+        statuses = [c[1] for c in callback_calls]
+        assert "in_progress" in statuses
+
+    @pytest.mark.asyncio
+    async def test_work_on_issue_precommit_fails_max_attempts(self, temp_dir: Path) -> None:
+        """Should fail when pre-commit fails and max attempts reached."""
+        config = GitHubConfig(
+            owner="testuser",
+            repo="testrepo",
+            max_fix_attempts=1,
+        )
+        service = MagicMock()
+        workflow = GitHubWorkflow(config=config, project_path=temp_dir, github_service=service)
+
+        issue = Issue(1, "[Test] Issue", "", [], "open", "")
+        workflow_issue = WorkflowIssue(issue=issue, fix_attempts=1)  # Already at max
+        workflow.issues[1] = workflow_issue
+
+        async def mock_impl(_issue: Issue) -> None:
+            pass
+
+        with (
+            patch("specinit.github.workflow.create_branch"),
+            patch("subprocess.run") as mock_run,
+        ):
+            # Pre-commit fails
+            mock_run.return_value = MagicMock(returncode=1, stdout="fail", stderr="")
+            await workflow.work_on_issue(workflow_issue, mock_impl)
+
+        assert workflow_issue.status == IssueStatus.FAILED
