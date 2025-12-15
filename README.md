@@ -12,8 +12,8 @@
   <a href="https://github.com/Geoffe-Ga/specinit/actions/workflows/ci.yml">
     <img src="https://github.com/Geoffe-Ga/specinit/actions/workflows/ci.yml/badge.svg" alt="CI Status" />
   </a>
-  <a href="https://codecov.io/gh/specinit/specinit">
-    <img src="https://codecov.io/gh/specinit/specinit/branch/main/graph/badge.svg" alt="Coverage" />
+  <a href="https://codecov.io/gh/Geoffe-Ga/specinit">
+    <img src="https://codecov.io/gh/Geoffe-Ga/specinit/branch/main/graph/badge.svg" alt="Coverage" />
   </a>
   <a href="https://pypi.org/project/specinit/">
     <img src="https://img.shields.io/pypi/v/specinit.svg" alt="PyPI Version" />
