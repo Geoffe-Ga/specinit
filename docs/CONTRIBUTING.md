@@ -14,7 +14,7 @@ Thank you for your interest in contributing to SpecInit! This guide will help yo
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/specinit/specinit.git
+   git clone https://github.com/Geoffe-Ga/specinit.git
    cd specinit
    ```
 
