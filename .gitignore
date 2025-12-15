@@ -10,7 +10,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# Python build lib directories (not scripts/lib or docs/script-templates/lib)
+/lib/
 lib64/
 parts/
 sdist/
@@ -78,6 +79,9 @@ npm-debug.log*
 # Database
 *.db
 *.sqlite3
+
+# Script logs
+.logs/
 
 # Misc
 *.bak

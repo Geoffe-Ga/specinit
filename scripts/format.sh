@@ -1,0 +1,265 @@
+#!/bin/bash
+# =============================================================================
+# format.sh - Auto-fix formatting issues across the project
+# =============================================================================
+#
+# Automatically formats code using:
+#   - Python: ruff format
+#   - TypeScript/JavaScript: Prettier (if configured)
+#
+# Usage:
+#   ./scripts/format.sh [options] [paths...]
+#
+# Options:
+#   --check         Check formatting without modifying files
+#   --verbose, -v   Show detailed output
+#   --quiet, -q     Minimal output
+#   --python        Format Python only
+#   --frontend      Format frontend only
+#   --help, -h      Show this help message
+#
+# Examples:
+#   ./scripts/format.sh                    # Format everything
+#   ./scripts/format.sh --check            # Check only (CI mode)
+#   ./scripts/format.sh src/specinit       # Format specific path
+#
+# =============================================================================
+
+set -eo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "${SCRIPT_DIR}/lib/common.sh"
+# shellcheck source=lib/detect.sh
+source "${SCRIPT_DIR}/lib/detect.sh"
+
+# =============================================================================
+# Configuration
+# =============================================================================
+
+# shellcheck disable=SC2034  # VERBOSE and QUIET are used by common.sh
+CHECK_ONLY=false
+PYTHON_ONLY=false
+FRONTEND_ONLY=false
+CUSTOM_PATHS=()
+ERRORS=0
+
+# =============================================================================
+# Help
+# =============================================================================
+
+show_help() {
+    cat << 'EOF'
+format.sh - Auto-fix formatting issues across the project
+
+USAGE:
+    ./scripts/format.sh [OPTIONS] [PATHS...]
+
+OPTIONS:
+    --check         Check formatting without modifying files
+    --verbose, -v   Show detailed output
+    --quiet, -q     Minimal output
+    --python        Format Python only
+    --frontend      Format frontend only
+    --help, -h      Show this help message
+
+EXAMPLES:
+    ./scripts/format.sh                    # Format everything
+    ./scripts/format.sh --check            # Check only (CI mode)
+    ./scripts/format.sh src/specinit       # Format specific path
+    ./scripts/format.sh --python           # Format Python only
+EOF
+}
+
+# =============================================================================
+# Argument Parsing
+# =============================================================================
+
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --check)
+                CHECK_ONLY=true
+                shift
+                ;;
+            --verbose|-v)
+                # shellcheck disable=SC2034
+                VERBOSE=true
+                shift
+                ;;
+            --quiet|-q)
+                # shellcheck disable=SC2034
+                QUIET=true
+                shift
+                ;;
+            --python)
+                PYTHON_ONLY=true
+                shift
+                ;;
+            --frontend)
+                FRONTEND_ONLY=true
+                shift
+                ;;
+            --help|-h)
+                show_help
+                exit 0
+                ;;
+            -*)
+                log_error "Unknown option: $1"
+                exit "$EXIT_INVALID_ARGS"
+                ;;
+            *)
+                CUSTOM_PATHS+=("$1")
+                shift
+                ;;
+        esac
+    done
+}
+
+# =============================================================================
+# Python Formatting
+# =============================================================================
+
+format_python() {
+    if ! detect_python; then
+        log_debug "No Python project detected, skipping"
+        return 0
+    fi
+
+    log_step "Python Formatting"
+
+    # Activate virtual environment if available
+    activate_venv || true
+
+    local python_dirs
+    if [[ ${#CUSTOM_PATHS[@]} -gt 0 ]]; then
+        python_dirs="${CUSTOM_PATHS[*]}"
+    else
+        python_dirs=$(get_python_dirs)
+    fi
+
+    if [[ -z "$python_dirs" ]]; then
+        log_warn "No Python directories found"
+        return 0
+    fi
+
+    # Ruff format
+    if python -m ruff --version &>/dev/null; then
+        local ruff_args="format"
+        [[ "$CHECK_ONLY" == true ]] && ruff_args="format --check"
+
+        log_info "Running ruff format..."
+        # shellcheck disable=SC2086
+        if python -m ruff $ruff_args $python_dirs; then
+            if [[ "$CHECK_ONLY" == true ]]; then
+                log_success "Python formatting check passed"
+            else
+                log_success "Python files formatted"
+            fi
+        else
+            log_error "Python formatting issues found"
+            ((ERRORS++))
+        fi
+    else
+        log_warn "ruff not installed, skipping Python formatting"
+    fi
+
+    # Also run ruff check --fix for auto-fixable issues
+    if [[ "$CHECK_ONLY" != true ]] && python -m ruff --version &>/dev/null; then
+        log_info "Applying ruff auto-fixes..."
+        # shellcheck disable=SC2086
+        python -m ruff check --fix $python_dirs 2>/dev/null || true
+    fi
+}
+
+# =============================================================================
+# Frontend Formatting
+# =============================================================================
+
+format_frontend() {
+    if ! detect_frontend; then
+        log_debug "No frontend project detected, skipping"
+        return 0
+    fi
+
+    log_step "Frontend Formatting"
+
+    local frontend_dir
+    frontend_dir=$(get_frontend_dir)
+
+    if [[ -z "$frontend_dir" ]] || [[ ! -d "$frontend_dir" ]]; then
+        log_warn "Frontend directory not found"
+        return 0
+    fi
+
+    pushd "$frontend_dir" > /dev/null
+
+    # Check for node_modules
+    if [[ ! -d "node_modules" ]]; then
+        log_warn "node_modules not found, installing dependencies..."
+        npm ci || npm install
+    fi
+
+    # Prettier
+    if detect_prettier; then
+        log_info "Running Prettier..."
+        local prettier_args="--write"
+        [[ "$CHECK_ONLY" == true ]] && prettier_args="--check"
+
+        # shellcheck disable=SC2086
+        if npx prettier $prettier_args "src/**/*.{ts,tsx,js,jsx,css,json}" 2>/dev/null; then
+            if [[ "$CHECK_ONLY" == true ]]; then
+                log_success "Frontend formatting check passed"
+            else
+                log_success "Frontend files formatted"
+            fi
+        else
+            log_error "Frontend formatting issues found"
+            ((ERRORS++))
+        fi
+    else
+        log_debug "Prettier not configured, skipping"
+    fi
+
+    # ESLint --fix for auto-fixable issues
+    if [[ "$CHECK_ONLY" != true ]] && detect_eslint; then
+        log_info "Applying ESLint auto-fixes..."
+        npm run lint -- --fix 2>/dev/null || true
+    fi
+
+    popd > /dev/null
+}
+
+# =============================================================================
+# Main
+# =============================================================================
+
+main() {
+    setup_colors
+    parse_args "$@"
+
+    if [[ "$CHECK_ONLY" == true ]]; then
+        log_info "Checking formatting (no changes will be made)..."
+    else
+        log_info "Formatting code..."
+    fi
+
+    [[ "$FRONTEND_ONLY" != true ]] && format_python
+    [[ "$PYTHON_ONLY" != true ]] && format_frontend
+
+    log_summary "Format Summary"
+
+    if [[ $ERRORS -eq 0 ]]; then
+        if [[ "$CHECK_ONLY" == true ]]; then
+            log_success "All formatting checks passed!"
+        else
+            log_success "All files formatted!"
+        fi
+        exit "$EXIT_SUCCESS"
+    else
+        log_error "$ERRORS formatting check(s) failed"
+        exit "$EXIT_LINT_FAIL"
+    fi
+}
+
+main "$@"
