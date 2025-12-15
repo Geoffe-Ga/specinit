@@ -489,7 +489,6 @@ How to test these changes manually (if applicable).
 - **Bug reports**: [Open an issue](https://github.com/Geoffe-Ga/specinit/issues/new?template=bug_report.md)
 - **Feature requests**: [Open an issue](https://github.com/Geoffe-Ga/specinit/issues/new?template=feature_request.md)
 - **Questions**: [Start a discussion](https://github.com/Geoffe-Ga/specinit/discussions)
-- **Security issues**: Email security@specinit.dev (do not open public issues)
 
 ---
 
