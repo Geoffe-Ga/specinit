@@ -55,10 +55,10 @@ dev = [
 specinit = "specinit.cli.main:cli"
 
 [project.urls]
-Homepage = "https://github.com/specinit/specinit"
-Documentation = "https://github.com/specinit/specinit#readme"
-Repository = "https://github.com/specinit/specinit"
-Issues = "https://github.com/specinit/specinit/issues"
+Homepage = "https://github.com/Geoffe-Ga/specinit"
+Documentation = "https://github.com/Geoffe-Ga/specinit#readme"
+Repository = "https://github.com/Geoffe-Ga/specinit"
+Issues = "https://github.com/Geoffe-Ga/specinit/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/specinit"]

@@ -8,7 +8,7 @@ Thank you for your interest in contributing to SpecInit! This guide will help yo
 
 ```bash
 # Setup (one-time)
-git clone https://github.com/specinit/specinit.git && cd specinit
+git clone https://github.com/Geoffe-Ga/specinit.git && cd specinit
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 pre-commit install
@@ -35,7 +35,7 @@ pre-commit run --all-files  # Run all checks
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/specinit/specinit.git
+git clone https://github.com/Geoffe-Ga/specinit.git
 cd specinit
 
 # 2. Create and activate virtual environment
@@ -145,9 +145,9 @@ User runs `specinit new`
 
 ### Finding Something to Work On
 
-1. **Good First Issues**: Look for issues labeled [`good first issue`](https://github.com/specinit/specinit/labels/good%20first%20issue)
-2. **Bug Fixes**: Issues labeled [`bug`](https://github.com/specinit/specinit/labels/bug)
-3. **Features**: Issues labeled [`enhancement`](https://github.com/specinit/specinit/labels/enhancement)
+1. **Good First Issues**: Look for issues labeled [`good first issue`](https://github.com/Geoffe-Ga/specinit/labels/good%20first%20issue)
+2. **Bug Fixes**: Issues labeled [`bug`](https://github.com/Geoffe-Ga/specinit/labels/bug)
+3. **Features**: Issues labeled [`enhancement`](https://github.com/Geoffe-Ga/specinit/labels/enhancement)
 4. **Documentation**: Always welcome without prior discussion
 
 ### Workflow
@@ -486,10 +486,9 @@ How to test these changes manually (if applicable).
 
 ## Getting Help
 
-- **Bug reports**: [Open an issue](https://github.com/specinit/specinit/issues/new?template=bug_report.md)
-- **Feature requests**: [Open an issue](https://github.com/specinit/specinit/issues/new?template=feature_request.md)
-- **Questions**: [Start a discussion](https://github.com/specinit/specinit/discussions)
-- **Security issues**: Email security@specinit.dev (do not open public issues)
+- **Bug reports**: [Open an issue](https://github.com/Geoffe-Ga/specinit/issues/new?template=bug_report.md)
+- **Feature requests**: [Open an issue](https://github.com/Geoffe-Ga/specinit/issues/new?template=feature_request.md)
+- **Questions**: [Start a discussion](https://github.com/Geoffe-Ga/specinit/discussions)
 
 ---
 

@@ -234,5 +234,5 @@ See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for:
 ---
 
 <p align="center">
-  <sub>Generated with <a href="https://github.com/specinit/specinit">SpecInit</a></sub>
+  <sub>Generated with <a href="https://github.com/Geoffe-Ga/specinit">SpecInit</a></sub>
 </p>
