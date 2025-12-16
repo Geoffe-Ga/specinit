@@ -91,10 +91,13 @@ ignore = [
     "S101",    # assert usage (OK in tests)
     "PLR0913", # too many arguments (sometimes necessary)
     "PLR2004", # magic value comparison (too noisy)
+    "PLR0911", # too many return statements (workflow methods have complex logic)
+    "PLR0912", # too many branches (workflow methods have complex state handling)
     "S603",    # subprocess call - we use literal strings, not user input
     "S607",    # partial executable path - intentional for git/npm commands
     "S105",    # "token" in variable names isn't hardcoded passwords
     "S106",    # "token" in argument names isn't hardcoded passwords
+    "BLE001",  # blind exception - sometimes we want to catch all exceptions
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -137,3 +140,10 @@ exclude_lines = [
     "raise AssertionError",
     "raise NotImplementedError",
 ]
+# Coverage thresholds - enforced in CI
+fail_under = 90
+
+# Per-module coverage thresholds (checked by scripts/test.sh)
+# Logic-heavy modules: 90%+
+# Frontend/UI: 60%+ (realistic for UI components)
+# See scripts/test.sh for enforcement
