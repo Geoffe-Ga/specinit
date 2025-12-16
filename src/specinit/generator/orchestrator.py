@@ -232,9 +232,17 @@ class GenerationOrchestrator:
         )
 
     async def _init_git(self, context: dict[str, Any]) -> None:
-        """Step 7: Initialize Git repository."""
+        """Step 7: Initialize Git repository.
+
+        Issue #13 Fix: Properly check subprocess return codes and raise errors.
+        """
         # Initialize git
-        subprocess.run(["git", "init"], cwd=self.project_path, capture_output=True, check=False)
+        result = subprocess.run(
+            ["git", "init"], cwd=self.project_path, capture_output=True, check=False
+        )
+        if result.returncode != 0:
+            stderr = result.stderr.decode("utf-8", errors="replace")
+            raise RuntimeError(f"Git init failed: {stderr}")
 
         # Create .gitignore if not exists
         gitignore_path = self.project_path / ".gitignore"
@@ -254,13 +262,26 @@ Features:
 
 Generated with SpecInit
 """
-        subprocess.run(["git", "add", "."], cwd=self.project_path, capture_output=True, check=False)
-        subprocess.run(
+        # Stage all files
+        result = subprocess.run(
+            ["git", "add", "."], cwd=self.project_path, capture_output=True, check=False
+        )
+        if result.returncode != 0:
+            stderr = result.stderr.decode("utf-8", errors="replace")
+            raise RuntimeError(f"Git add failed: {stderr}")
+
+        # Create commit
+        result = subprocess.run(
             ["git", "commit", "-m", commit_message],
             cwd=self.project_path,
             capture_output=True,
             check=False,
         )
+        if result.returncode != 0:
+            stderr = result.stderr.decode("utf-8", errors="replace")
+            # Allow "nothing to commit" as a non-error
+            if "nothing to commit" not in stderr.lower():
+                raise RuntimeError(f"Git commit failed: {stderr}")
 
         self.file_writer.append(
             "plan/progress-notes.md",

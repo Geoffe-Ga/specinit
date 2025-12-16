@@ -1,5 +1,7 @@
 """Tests for file writer utilities."""
 
+import pytest
+
 from specinit.generator.file_writer import FileWriter
 
 
@@ -135,3 +137,88 @@ def test_main():
 
         assert result["valid"] is False
         assert "plan/" in result["missing_dirs"]
+
+
+class TestPathValidation:
+    """Tests for path traversal protection in FileWriter (Issue #18)."""
+
+    def test_write_rejects_path_traversal_with_dotdot(self, temp_dir):
+        """write should reject paths with .. that escape project root."""
+        writer = FileWriter(temp_dir)
+
+        with pytest.raises(ValueError, match="Path traversal"):
+            writer.write("../outside.txt", "Malicious content")
+
+    def test_write_rejects_absolute_paths(self, temp_dir):
+        """write should reject absolute paths."""
+        writer = FileWriter(temp_dir)
+
+        with pytest.raises(ValueError, match="Path traversal"):
+            writer.write("/etc/passwd", "Malicious content")
+
+    def test_append_rejects_path_traversal(self, temp_dir):
+        """append should reject paths with .. that escape project root."""
+        writer = FileWriter(temp_dir)
+
+        with pytest.raises(ValueError, match="Path traversal"):
+            writer.append("../../outside.txt", "Malicious content")
+
+    def test_create_structure_rejects_path_traversal_mkdir(self, temp_dir):
+        """create_structure_from_script should reject mkdir with path traversal."""
+        writer = FileWriter(temp_dir)
+
+        script = """#!/bin/bash
+mkdir -p ../../../malicious_dir
+"""
+        with pytest.raises(ValueError, match="Path traversal"):
+            writer.create_structure_from_script(script)
+
+    def test_create_structure_rejects_path_traversal_touch(self, temp_dir):
+        """create_structure_from_script should reject touch with path traversal."""
+        writer = FileWriter(temp_dir)
+
+        script = """#!/bin/bash
+touch ../../../etc/cron.d/malicious
+"""
+        with pytest.raises(ValueError, match="Path traversal"):
+            writer.create_structure_from_script(script)
+
+    def test_create_structure_rejects_absolute_path(self, temp_dir):
+        """create_structure_from_script should reject absolute paths."""
+        writer = FileWriter(temp_dir)
+
+        script = """#!/bin/bash
+mkdir -p /tmp/malicious
+"""
+        with pytest.raises(ValueError, match="Path traversal"):
+            writer.create_structure_from_script(script)
+
+    def test_parse_and_write_files_rejects_path_traversal(self, temp_dir):
+        """_parse_and_write_files should reject paths with traversal."""
+        writer = FileWriter(temp_dir)
+
+        content = """--- FILE: ../../../malicious.py ---
+import os
+"""
+        with pytest.raises(ValueError, match="Path traversal"):
+            writer._parse_and_write_files(content)
+
+    def test_write_allows_valid_nested_paths(self, temp_dir):
+        """write should allow deeply nested paths within project."""
+        writer = FileWriter(temp_dir)
+
+        writer.write("src/components/ui/button/index.tsx", "export default Button;")
+
+        assert (temp_dir / "src/components/ui/button/index.tsx").exists()
+
+    def test_write_allows_relative_paths_within_project(self, temp_dir):
+        """write should allow paths that use .. but stay within project."""
+        writer = FileWriter(temp_dir)
+
+        # Create nested directory first
+        (temp_dir / "src" / "utils").mkdir(parents=True)
+
+        # This path resolves to temp_dir/src/file.txt (stays within project)
+        writer.write("src/utils/../file.txt", "Content")
+
+        assert (temp_dir / "src" / "file.txt").exists()

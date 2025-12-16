@@ -1,5 +1,6 @@
 """Integration tests for project generation."""
 
+import subprocess
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -7,6 +8,27 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from specinit.generator.orchestrator import GenerationOrchestrator
+
+
+def configure_git_in_temp_home(temp_dir: Path) -> None:
+    """Configure git user in a temp HOME directory.
+
+    When tests change HOME to a temp directory, git looks for ~/.gitconfig
+    there. This function sets up git config in the temp HOME so git commands
+    don't fail with "Author identity unknown" errors.
+    """
+    subprocess.run(
+        ["git", "config", "--global", "user.email", "test@specinit.test"],
+        cwd=temp_dir,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "--global", "user.name", "Test Runner"],
+        cwd=temp_dir,
+        check=True,
+        capture_output=True,
+    )
 
 
 class TestGenerationOrchestrator:
@@ -31,6 +53,7 @@ class TestGenerationOrchestrator:
         """Generation should create plan/ directory with required files."""
         # Mock dependencies
         monkeypatch.setenv("HOME", str(temp_dir))
+        configure_git_in_temp_home(temp_dir)
 
         with (
             patch("specinit.generator.orchestrator.Anthropic") as mock_anthropic,
@@ -96,6 +119,7 @@ class TestGenerationOrchestrator:
     ) -> None:
         """Generation should track API costs."""
         monkeypatch.setenv("HOME", str(temp_dir))
+        configure_git_in_temp_home(temp_dir)
 
         with (
             patch("specinit.generator.orchestrator.Anthropic") as mock_anthropic,
@@ -155,6 +179,7 @@ class TestGenerationOrchestrator:
     ) -> None:
         """Progress callback should be called for each step."""
         monkeypatch.setenv("HOME", str(temp_dir))
+        configure_git_in_temp_home(temp_dir)
 
         with (
             patch("specinit.generator.orchestrator.Anthropic") as mock_anthropic,

@@ -10,23 +10,55 @@ class FileWriter:
 
     def __init__(self, project_path: Path) -> None:
         """Initialize with the project root path."""
-        self.project_path = project_path
+        self.project_path = project_path.resolve()
+
+    def _validate_path(self, relative_path: str) -> Path:
+        """Validate that a path stays within the project directory.
+
+        Args:
+            relative_path: The relative path to validate.
+
+        Returns:
+            The resolved absolute path.
+
+        Raises:
+            ValueError: If the path escapes the project directory (path traversal).
+        """
+        # Reject absolute paths immediately
+        if relative_path.startswith("/") or (len(relative_path) > 1 and relative_path[1] == ":"):
+            raise ValueError(
+                f"Path traversal detected: absolute paths not allowed: {relative_path}"
+            )
+
+        # Resolve the full path
+        full_path = (self.project_path / relative_path).resolve()
+
+        # Verify it's within the project directory
+        try:
+            full_path.relative_to(self.project_path)
+        except ValueError:
+            raise ValueError(
+                f"Path traversal detected: path escapes project directory: {relative_path}"
+            ) from None
+
+        return full_path
 
     def write(self, relative_path: str, content: str) -> Path:
         """Write content to a file, creating directories as needed."""
-        file_path = self.project_path / relative_path
+        file_path = self._validate_path(relative_path)
         file_path.parent.mkdir(parents=True, exist_ok=True)
         file_path.write_text(content)
         return file_path
 
     def append(self, relative_path: str, content: str) -> Path:
         """Append content to an existing file."""
-        file_path = self.project_path / relative_path
+        file_path = self._validate_path(relative_path)
         if file_path.exists():
             existing = file_path.read_text()
             file_path.write_text(existing + content)
         else:
-            self.write(relative_path, content)
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path.write_text(content)
         return file_path
 
     def create_structure_from_script(self, script_content: str) -> None:
@@ -35,14 +67,14 @@ class FileWriter:
         mkdir_pattern = r"mkdir\s+-p\s+([^\s]+)"
         for match in re.finditer(mkdir_pattern, script_content):
             dir_path = match.group(1).strip("'\"")
-            full_path = self.project_path / dir_path
+            full_path = self._validate_path(dir_path)
             full_path.mkdir(parents=True, exist_ok=True)
 
         # Extract touch commands
         touch_pattern = r"touch\s+([^\s]+)"
         for match in re.finditer(touch_pattern, script_content):
             file_path = match.group(1).strip("'\"")
-            full_path = self.project_path / file_path
+            full_path = self._validate_path(file_path)
             full_path.parent.mkdir(parents=True, exist_ok=True)
             full_path.touch()
 

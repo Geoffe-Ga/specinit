@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 
@@ -27,9 +28,32 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global state
-_output_dir: Path = Path.cwd()
-_shutdown_event: asyncio.Event | None = None
+# Issue #10 Fix: Use context variables for async context isolation
+# This replaces global mutable state to prevent race conditions
+# Note: We use None as default and initialize lazily to avoid B039 (mutable default)
+_output_dir_var: ContextVar[Path | None] = ContextVar("output_dir", default=None)
+_shutdown_event_var: ContextVar[asyncio.Event | None] = ContextVar("shutdown_event", default=None)
+
+
+def get_output_dir() -> Path:
+    """Get the current output directory from context."""
+    value = _output_dir_var.get()
+    return value if value is not None else Path.cwd()
+
+
+def set_output_dir(path: Path) -> None:
+    """Set the output directory in the current context."""
+    _output_dir_var.set(path)
+
+
+def get_shutdown_event() -> asyncio.Event | None:
+    """Get the shutdown event from context."""
+    return _shutdown_event_var.get()
+
+
+def set_shutdown_event(event: asyncio.Event | None) -> None:
+    """Set the shutdown event in the current context."""
+    _shutdown_event_var.set(event)
 
 
 class GitHubConfigModel(BaseModel):
@@ -170,9 +194,9 @@ async def generate_project(websocket: WebSocket) -> None:
         config_data = json.loads(data)
         project_config = ProjectConfig(**config_data)
 
-        # Create orchestrator
+        # Create orchestrator using context variable for output dir
         orchestrator = GenerationOrchestrator(
-            output_dir=_output_dir,
+            output_dir=get_output_dir(),
             project_name=project_config.name,
         )
 
@@ -222,12 +246,11 @@ async def generate_project(websocket: WebSocket) -> None:
 
 def start_server(port: int = 8765, output_dir: Path | None = None) -> None:
     """Start the FastAPI server."""
-    global _output_dir, _shutdown_event  # noqa: PLW0603
-
+    # Issue #10 Fix: Use context variables instead of global state
     if output_dir:
-        _output_dir = output_dir
+        set_output_dir(output_dir)
 
-    _shutdown_event = asyncio.Event()
+    set_shutdown_event(asyncio.Event())
 
     # Mount static files for the frontend
     frontend_dir = Path(__file__).parent.parent.parent.parent / "frontend" / "dist"
