@@ -13,6 +13,7 @@ from specinit.github.workflow import (
     GitHubConfig,
     GitHubWorkflow,
     IssueStatus,
+    ProgressCallback,
     WorkflowIssue,
 )
 
@@ -1327,14 +1328,14 @@ class TestClaudeCodeReviewAdvanced:
         return GitHubWorkflow(config=config, project_path=temp_dir, github_service=service)
 
     def test_claude_review_no_interaction(self, workflow_for_claude: GitHubWorkflow) -> None:
-        """Should assume approved if no Claude interaction."""
+        """Should NOT approve if no Claude interaction (waiting for review)."""
         reviews: list[dict[str, Any]] = []
         comments: list[dict[str, Any]] = []
 
         approved, feedback = workflow_for_claude._check_claude_code_review(reviews, comments)
 
-        # No interaction = consider approved
-        assert approved is True
+        # No interaction = NOT approved (must wait for Claude to review)
+        assert approved is False
         assert feedback == []
 
     def test_claude_review_non_actionable_comment(
@@ -1410,3 +1411,242 @@ class TestWaitForCIEdgeCases:
         await workflow._wait_for_ci(workflow_issue)
 
         assert workflow_issue.status == IssueStatus.IN_REVIEW
+
+
+class TestIterateCIStateValidation:
+    """Tests for _iterate_ci state validation (Critical Issue #1)."""
+
+    @pytest.fixture
+    def workflow_for_state_validation(self, temp_dir: Path) -> tuple[GitHubWorkflow, MagicMock]:
+        """Create workflow for state validation testing."""
+        config = GitHubConfig(
+            owner="testuser",
+            repo="testrepo",
+            iterate_on_ci=True,
+            max_fix_attempts=3,
+        )
+        service = MagicMock()
+        workflow = GitHubWorkflow(config=config, project_path=temp_dir, github_service=service)
+        return workflow, service
+
+    @pytest.mark.asyncio
+    async def test_iterate_ci_handles_unexpected_state(
+        self, workflow_for_state_validation: tuple[GitHubWorkflow, MagicMock]
+    ) -> None:
+        """Should return False when CI enters unexpected state."""
+        workflow, _service = workflow_for_state_validation
+
+        issue = Issue(1, "Test", "", [], "open", "")
+        pr = PullRequest(1, "PR", "", "branch", "main", "open", "")
+        workflow_issue = WorkflowIssue(issue=issue, pr=pr, branch_name="branch")
+
+        # Force an unexpected state after _wait_for_ci
+        async def mock_wait_for_ci(wi: WorkflowIssue, _cb: ProgressCallback | None = None) -> None:
+            wi.status = IssueStatus.BLOCKED  # Unexpected state
+
+        async def mock_impl(_issue: Issue) -> None:
+            pass
+
+        with patch.object(workflow, "_wait_for_ci", mock_wait_for_ci):
+            result = await workflow._iterate_ci(workflow_issue, mock_impl)
+
+        assert result is False
+        assert workflow_issue.error_message != ""  # Should have error context
+
+    @pytest.mark.asyncio
+    async def test_iterate_ci_handles_queued_state(
+        self, workflow_for_state_validation: tuple[GitHubWorkflow, MagicMock]
+    ) -> None:
+        """Should return False when CI enters QUEUED state unexpectedly."""
+        workflow, _service = workflow_for_state_validation
+
+        issue = Issue(1, "Test", "", [], "open", "")
+        pr = PullRequest(1, "PR", "", "branch", "main", "open", "")
+        workflow_issue = WorkflowIssue(issue=issue, pr=pr, branch_name="branch")
+
+        async def mock_wait_for_ci(wi: WorkflowIssue, _cb: ProgressCallback | None = None) -> None:
+            wi.status = IssueStatus.QUEUED  # Unexpected - went back to queued
+
+        async def mock_impl(_issue: Issue) -> None:
+            pass
+
+        with patch.object(workflow, "_wait_for_ci", mock_wait_for_ci):
+            result = await workflow._iterate_ci(workflow_issue, mock_impl)
+
+        assert result is False
+
+
+class TestGetCIFailureInfoImplementation:
+    """Tests for _get_ci_failure_info proper implementation (Critical Issue #3)."""
+
+    @pytest.fixture
+    def workflow_for_failure_info(self, temp_dir: Path) -> tuple[GitHubWorkflow, MagicMock]:
+        """Create workflow for failure info testing."""
+        config = GitHubConfig(owner="testuser", repo="testrepo")
+        service = MagicMock()
+        workflow = GitHubWorkflow(config=config, project_path=temp_dir, github_service=service)
+        return workflow, service
+
+    @pytest.mark.asyncio
+    async def test_get_ci_failure_info_returns_failures(
+        self, workflow_for_failure_info: tuple[GitHubWorkflow, MagicMock]
+    ) -> None:
+        """Should return failure info from check runs."""
+        workflow, service = workflow_for_failure_info
+        service.get_pr_checks.return_value = {
+            "check_runs": [
+                {
+                    "name": "tests",
+                    "conclusion": "failure",
+                    "output": {"title": "Test failures", "summary": "3 tests failed"},
+                },
+                {"name": "lint", "conclusion": "success"},
+            ]
+        }
+
+        issue = Issue(1, "Test", "", [], "open", "")
+        workflow_issue = WorkflowIssue(issue=issue, branch_name="test-branch")
+
+        failures = await workflow._get_ci_failure_info(workflow_issue)
+
+        assert len(failures) >= 1
+        assert any(f.get("name") == "tests" for f in failures)
+
+    @pytest.mark.asyncio
+    async def test_get_ci_failure_info_empty_without_branch(
+        self, workflow_for_failure_info: tuple[GitHubWorkflow, MagicMock]
+    ) -> None:
+        """Should return empty list when no branch name."""
+        workflow, _service = workflow_for_failure_info
+
+        issue = Issue(1, "Test", "", [], "open", "")
+        workflow_issue = WorkflowIssue(issue=issue, branch_name="")
+
+        failures = await workflow._get_ci_failure_info(workflow_issue)
+
+        assert failures == []
+
+
+class TestClaudeCodeReviewNoAutoApprove:
+    """Tests for Claude Code review not auto-approving (Critical Issue #6)."""
+
+    @pytest.fixture
+    def workflow_for_claude_no_approve(self, temp_dir: Path) -> GitHubWorkflow:
+        """Create workflow for Claude no-auto-approve testing."""
+        config = GitHubConfig(
+            owner="testuser",
+            repo="testrepo",
+            yolo_mode=True,
+            claude_code_review=True,
+        )
+        service = MagicMock()
+        return GitHubWorkflow(config=config, project_path=temp_dir, github_service=service)
+
+    def test_claude_review_no_interaction_not_approved(
+        self, workflow_for_claude_no_approve: GitHubWorkflow
+    ) -> None:
+        """Should NOT auto-approve if claude_code_review required but no interaction."""
+        # Only human reviews, no Claude interaction
+        reviews: list[dict[str, Any]] = [{"user": {"login": "human-reviewer"}, "state": "APPROVED"}]
+        comments: list[dict[str, Any]] = []
+
+        approved, _feedback = workflow_for_claude_no_approve._check_claude_code_review(
+            reviews, comments
+        )
+
+        # Should NOT be approved - Claude hasn't reviewed yet
+        assert approved is False
+
+
+class TestHandleReviewsRaceCondition:
+    """Tests for race condition fix in _handle_reviews (Critical Issue #2)."""
+
+    @pytest.fixture
+    def workflow_for_race_condition(self, temp_dir: Path) -> tuple[GitHubWorkflow, MagicMock]:
+        """Create workflow for race condition testing."""
+        config = GitHubConfig(
+            owner="testuser",
+            repo="testrepo",
+            yolo_mode=True,
+            max_fix_attempts=2,
+            review_poll_interval=0,
+        )
+        service = MagicMock()
+        workflow = GitHubWorkflow(config=config, project_path=temp_dir, github_service=service)
+        return workflow, service
+
+    @pytest.mark.asyncio
+    async def test_handle_reviews_waits_for_ci_if_running(
+        self, workflow_for_race_condition: tuple[GitHubWorkflow, MagicMock]
+    ) -> None:
+        """Should wait for CI to complete if status is CI_RUNNING before checking reviews."""
+        workflow, service = workflow_for_race_condition
+        service.get_pr_reviews.return_value = [{"state": "APPROVED"}]
+        service.get_pr_comments.return_value = []
+        service.get_pr_checks.return_value = {
+            "check_runs": [{"status": "completed", "conclusion": "success"}]
+        }
+
+        issue = Issue(1, "Test", "", [], "open", "")
+        pr = PullRequest(1, "PR", "", "branch", "main", "open", "")
+        # Start with CI_RUNNING status to trigger race condition check
+        workflow_issue = WorkflowIssue(
+            issue=issue, pr=pr, branch_name="branch", status=IssueStatus.CI_RUNNING
+        )
+
+        async def mock_impl(_issue: Issue) -> None:
+            pass
+
+        wait_for_ci_called = False
+
+        async def mock_wait_for_ci(wi: WorkflowIssue, _cb: ProgressCallback | None = None) -> None:
+            nonlocal wait_for_ci_called
+            wait_for_ci_called = True
+            wi.status = IssueStatus.IN_REVIEW  # CI passes
+
+        with patch.object(workflow, "_wait_for_ci", mock_wait_for_ci):
+            await workflow._handle_reviews(workflow_issue, mock_impl)
+
+        # Should have called _wait_for_ci before checking reviews
+        assert wait_for_ci_called is True
+        assert workflow_issue.status == IssueStatus.APPROVED
+
+    @pytest.mark.asyncio
+    async def test_handle_reviews_iterates_ci_if_fails_while_waiting(
+        self, workflow_for_race_condition: tuple[GitHubWorkflow, MagicMock]
+    ) -> None:
+        """Should iterate CI if it fails while waiting during race condition check."""
+        workflow, service = workflow_for_race_condition
+        service.get_pr_checks.return_value = {
+            "check_runs": [{"status": "completed", "conclusion": "failure"}]
+        }
+
+        issue = Issue(1, "Test", "", [], "open", "")
+        pr = PullRequest(1, "PR", "", "branch", "main", "open", "")
+        workflow_issue = WorkflowIssue(
+            issue=issue, pr=pr, branch_name="branch", status=IssueStatus.CI_RUNNING
+        )
+
+        async def mock_impl(_issue: Issue) -> None:
+            pass
+
+        iterate_ci_called = False
+
+        async def mock_wait_for_ci(wi: WorkflowIssue, _cb: ProgressCallback | None = None) -> None:
+            wi.status = IssueStatus.CI_FAILED
+
+        async def mock_iterate_ci(
+            _wi: WorkflowIssue, _impl: Any, _cb: ProgressCallback | None = None
+        ) -> bool:
+            nonlocal iterate_ci_called
+            iterate_ci_called = True
+            return False  # CI iteration fails
+
+        with (
+            patch.object(workflow, "_wait_for_ci", mock_wait_for_ci),
+            patch.object(workflow, "_iterate_ci", mock_iterate_ci),
+        ):
+            await workflow._handle_reviews(workflow_issue, mock_impl)
+
+        assert iterate_ci_called is True
+        assert workflow_issue.status == IssueStatus.FAILED

@@ -57,12 +57,26 @@ class WorkflowIssue:
 
 @dataclass
 class CoverageThresholds:
-    """Coverage thresholds for different module types."""
+    """Coverage thresholds for different module types.
 
-    overall: int = 90  # Overall minimum coverage
-    logic: int = 90  # Logic-heavy modules (generators, services, etc.)
-    ui: int = 60  # Frontend/UI components (realistic for UI)
-    tests: int = 0  # Test files themselves (excluded from coverage)
+    NOTE: Currently only `overall` threshold is enforced by _check_coverage.
+    The `logic`, `ui`, and `tests` fields are defined for future per-module
+    coverage checking but are NOT yet implemented. They serve as documentation
+    of the intended coverage philosophy:
+    - logic: High coverage for core business logic (90%+)
+    - ui: Realistic targets for UI components (60%+)
+    - tests: Test files are excluded from coverage
+
+    To implement per-module checking, _check_coverage would need to:
+    1. Parse coverage reports by file/module
+    2. Categorize modules by type (logic vs ui)
+    3. Apply appropriate thresholds per category
+    """
+
+    overall: int = 90  # Overall minimum coverage (ENFORCED)
+    logic: int = 90  # Logic-heavy modules - NOT YET ENFORCED
+    ui: int = 60  # Frontend/UI components - NOT YET ENFORCED
+    tests: int = 0  # Test files (excluded) - NOT YET ENFORCED
 
 
 @dataclass
@@ -82,7 +96,8 @@ class GitHubConfig:
     iterate_on_coverage: bool = True  # Retry coverage failures
     claude_code_review: bool = False  # Include Claude Code reviews in YOLO mode
     coverage_thresholds: CoverageThresholds = field(default_factory=CoverageThresholds)
-    ci_timeout_seconds: int = 600  # 10 minutes
+    ci_timeout_seconds: int = 600  # 10 minutes max wait for CI
+    ci_poll_interval: int = 15  # Seconds between CI status checks
     review_poll_interval: int = 30  # Seconds between review checks
 
 
@@ -400,12 +415,19 @@ Create comprehensive integration tests for all features.
             return
 
         # Commit and push
-        subprocess.run(
+        # High Issue #5 Fix: Use check=False with result validation for consistency
+        add_result = subprocess.run(
             ["git", "add", "."],
             cwd=self.project_path,
-            check=True,
+            check=False,
+            capture_output=True,
         )
-        subprocess.run(
+        if add_result.returncode != 0:
+            workflow_issue.error_message = f"git add failed: {add_result.stderr.decode()}"
+            workflow_issue.status = IssueStatus.FAILED
+            return
+
+        commit_result = subprocess.run(
             [
                 "git",
                 "commit",
@@ -413,8 +435,17 @@ Create comprehensive integration tests for all features.
                 f"feat: {issue.title}\n\nCloses #{issue.number}",
             ],
             cwd=self.project_path,
-            check=True,
+            check=False,
+            capture_output=True,
         )
+        if commit_result.returncode != 0:
+            # Commit might fail if nothing to commit - not necessarily an error
+            error_msg = commit_result.stderr.decode()
+            if "nothing to commit" not in error_msg.lower():
+                workflow_issue.error_message = f"git commit failed: {error_msg}"
+                workflow_issue.status = IssueStatus.FAILED
+                return
+
         push_branch(branch_name)
 
         # Create PR
@@ -490,18 +521,21 @@ Create comprehensive integration tests for all features.
         """Iterate on pre-commit failures until green or max attempts.
 
         Returns True if pre-commit eventually passes, False if max attempts exceeded.
+
+        Quality Issue #7 Fix: Uses workflow_issue.fix_attempts for consistent tracking
+        instead of a local counter. Note: _run_precommit increments fix_attempts on failure.
         """
         if not self.config.iterate_on_precommit:
             # Just run once without iteration
             return await self._run_precommit(workflow_issue)
 
-        attempt = 0
-        while attempt < self.config.max_fix_attempts:
+        # Quality Issue #7: Use fix_attempts for consistent tracking
+        while workflow_issue.fix_attempts < self.config.max_fix_attempts:
             success = await self._run_precommit(workflow_issue)
+            # Note: _run_precommit increments fix_attempts on failure
             if success:
                 return True
 
-            attempt += 1
             workflow_issue.status = IssueStatus.PRECOMMIT_FIXING
 
             if progress_callback:
@@ -509,13 +543,13 @@ Create comprehensive integration tests for all features.
                     f"issue_{workflow_issue.issue.number}",
                     "precommit_fixing",
                     {
-                        "attempt": attempt,
+                        "attempt": workflow_issue.fix_attempts,
                         "max_attempts": self.config.max_fix_attempts,
                         "error": workflow_issue.error_message[:500],
                     },
                 )
 
-            if attempt >= self.config.max_fix_attempts:
+            if workflow_issue.fix_attempts >= self.config.max_fix_attempts:
                 workflow_issue.status = IssueStatus.PRECOMMIT_FAILED
                 return False
 
@@ -541,19 +575,33 @@ Create comprehensive integration tests for all features.
         3. Any other CI workflow failures
 
         Returns True if CI eventually passes, False if max attempts exceeded.
+
+        Quality Issue #7 Fix: Uses workflow_issue.fix_attempts for consistent tracking
+        instead of a local counter. This ensures total attempts across all phases
+        is bounded by max_fix_attempts.
         """
-        attempt = 0
-        while attempt < self.config.max_fix_attempts:
+        # Valid states after _wait_for_ci completes
+        valid_states = {IssueStatus.IN_REVIEW, IssueStatus.CI_FAILED}
+
+        while workflow_issue.fix_attempts < self.config.max_fix_attempts:
             # Wait for CI to complete
             await self._wait_for_ci(workflow_issue, progress_callback)
+
+            # Critical Issue #1 Fix: Validate state after wait to prevent infinite loops
+            if workflow_issue.status not in valid_states:
+                workflow_issue.error_message = (
+                    f"Unexpected CI state: {workflow_issue.status.value}. "
+                    f"Expected one of: {[s.value for s in valid_states]}"
+                )
+                return False
 
             if workflow_issue.status == IssueStatus.IN_REVIEW:
                 # CI passed, check coverage if enabled
                 if self.config.iterate_on_coverage:
                     coverage_ok = await self._check_coverage(workflow_issue, progress_callback)
                     if not coverage_ok:
-                        attempt += 1
-                        if attempt >= self.config.max_fix_attempts:
+                        workflow_issue.fix_attempts += 1
+                        if workflow_issue.fix_attempts >= self.config.max_fix_attempts:
                             workflow_issue.status = IssueStatus.COVERAGE_FAILED
                             return False
 
@@ -562,7 +610,7 @@ Create comprehensive integration tests for all features.
                             await progress_callback(
                                 f"issue_{workflow_issue.issue.number}",
                                 "coverage_fixing",
-                                {"attempt": attempt},
+                                {"attempt": workflow_issue.fix_attempts},
                             )
 
                         # Call implementation callback to add tests
@@ -578,8 +626,8 @@ Create comprehensive integration tests for all features.
                 if not self.config.iterate_on_ci:
                     return False
 
-                attempt += 1
-                if attempt >= self.config.max_fix_attempts:
+                workflow_issue.fix_attempts += 1
+                if workflow_issue.fix_attempts >= self.config.max_fix_attempts:
                     return False
 
                 workflow_issue.status = IssueStatus.CI_FIXING
@@ -591,7 +639,7 @@ Create comprehensive integration tests for all features.
                         f"issue_{workflow_issue.issue.number}",
                         "ci_fixing",
                         {
-                            "attempt": attempt,
+                            "attempt": workflow_issue.fix_attempts,
                             "max_attempts": self.config.max_fix_attempts,
                             "failures": failure_info,
                         },
@@ -642,24 +690,73 @@ Create comprehensive integration tests for all features.
 
         return True
 
-    async def _get_ci_failure_info(self, _workflow_issue: WorkflowIssue) -> list[dict[str, str]]:
-        """Get details about CI failures from workflow logs."""
-        # Workflow run ID would need to be tracked separately
-        # For now, we rely on the progress callback to provide failure context
-        # from the CI checks themselves
-        return []
+    async def _get_ci_failure_info(self, workflow_issue: WorkflowIssue) -> list[dict[str, str]]:
+        """Get details about CI failures from workflow logs.
+
+        Returns a list of dicts with failure information including:
+        - name: check run name
+        - conclusion: the check conclusion (failure, etc.)
+        - title: output title (if available)
+        - summary: output summary (if available)
+        """
+        # Need branch name to query checks
+        if not workflow_issue.branch_name:
+            return []
+
+        try:
+            checks = self.github.get_pr_checks(
+                self.config.owner, self.config.repo, workflow_issue.branch_name
+            )
+        except Exception:
+            # Handle any API errors gracefully - return empty failures list
+            return []
+
+        failures: list[dict[str, str]] = []
+        check_runs = checks.get("check_runs", [])
+
+        for run in check_runs:
+            conclusion = run.get("conclusion", "")
+            if conclusion in ("failure", "cancelled", "timed_out"):
+                failure_info: dict[str, str] = {
+                    "name": run.get("name", "unknown"),
+                    "conclusion": conclusion,
+                }
+                # Add output details if available
+                output = run.get("output", {})
+                if output:
+                    if output.get("title"):
+                        failure_info["title"] = output["title"]
+                    if output.get("summary"):
+                        failure_info["summary"] = output["summary"]
+
+                failures.append(failure_info)
+
+        return failures
 
     async def _commit_and_push_fix(self, workflow_issue: WorkflowIssue, message: str) -> None:
-        """Commit and push fixes for a workflow issue."""
-        subprocess.run(["git", "add", "."], cwd=self.project_path, check=True)
+        """Commit and push fixes for a workflow issue.
+
+        Uses check=False for consistency with error handling throughout.
+        Failures here are logged but don't necessarily fail the workflow.
+        """
+        # High Issue #5 Fix: Consistent error handling with check=False
+        add_result = subprocess.run(
+            ["git", "add", "."],
+            cwd=self.project_path,
+            check=False,
+            capture_output=True,
+        )
+        if add_result.returncode != 0:
+            # Log but continue - add failures shouldn't stop iteration
+            workflow_issue.error_message = f"git add warning: {add_result.stderr.decode()}"
 
         # Check if there are changes to commit
-        result = subprocess.run(
+        diff_result = subprocess.run(
             ["git", "diff", "--staged", "--quiet"],
             cwd=self.project_path,
             check=False,
         )
-        if result.returncode == 0:
+        if diff_result.returncode == 0:
             # No changes to commit
             return
 
@@ -688,8 +785,9 @@ Create comprehensive integration tests for all features.
                 {"pr_number": pr.number},
             )
 
-        max_wait = 600  # 10 minutes
-        interval = 15
+        # Quality Issue #8 Fix: Use config values instead of magic numbers
+        max_wait = self.config.ci_timeout_seconds
+        interval = self.config.ci_poll_interval
         elapsed = 0
 
         while elapsed < max_wait:
@@ -740,13 +838,29 @@ Create comprehensive integration tests for all features.
         Continues until:
         - All reviewers approve (LGTM)
         - Max fix attempts exceeded
+
+        Quality Issue #7 Fix: Uses workflow_issue.fix_attempts for consistent tracking
+        instead of a local counter.
         """
         pr = workflow_issue.pr
         if not pr:
             return
 
-        review_attempt = 0
-        while review_attempt < self.config.max_fix_attempts:
+        while workflow_issue.fix_attempts < self.config.max_fix_attempts:
+            # Critical Issue #2 Fix: Verify CI is stable before checking reviews
+            # This prevents race condition where we check reviews while CI is still running
+            if workflow_issue.status == IssueStatus.CI_RUNNING:
+                await self._wait_for_ci(workflow_issue, progress_callback)
+
+            # Check if CI failed after waiting (status was modified by _wait_for_ci)
+            if workflow_issue.status == IssueStatus.CI_FAILED:
+                ci_success = await self._iterate_ci(
+                    workflow_issue, implementation_callback, progress_callback
+                )
+                if not ci_success:
+                    workflow_issue.status = IssueStatus.FAILED
+                    return
+
             # Get reviews and comments
             reviews = self.github.get_pr_reviews(self.config.owner, self.config.repo, pr.number)
             comments = self.github.get_pr_comments(self.config.owner, self.config.repo, pr.number)
@@ -782,14 +896,14 @@ Create comprehensive integration tests for all features.
                 return
 
             workflow_issue.status = IssueStatus.REVIEW_FIXING
-            review_attempt += 1
+            workflow_issue.fix_attempts += 1
 
             if progress_callback:
                 await progress_callback(
                     f"issue_{workflow_issue.issue.number}",
                     "review_fixing",
                     {
-                        "attempt": review_attempt,
+                        "attempt": workflow_issue.fix_attempts,
                         "max_attempts": self.config.max_fix_attempts,
                         "human_comments": len(
                             [
@@ -802,7 +916,7 @@ Create comprehensive integration tests for all features.
                     },
                 )
 
-            if review_attempt >= self.config.max_fix_attempts:
+            if workflow_issue.fix_attempts >= self.config.max_fix_attempts:
                 workflow_issue.status = IssueStatus.FAILED
                 return
 
@@ -845,11 +959,13 @@ Create comprehensive integration tests for all features.
         claude_patterns = ["claude-code", "claude[bot]", "claude-code[bot]"]
         feedback: list[str] = []
         has_approval = False
+        has_claude_interaction = False  # Track any Claude interaction
 
         # Check reviews from Claude Code
         for review in reviews:
             user_login = review.get("user", {}).get("login", "").lower()
             if any(pattern in user_login for pattern in claude_patterns):
+                has_claude_interaction = True
                 state = review.get("state", "")
                 if state == "APPROVED":
                     has_approval = True
@@ -862,18 +978,38 @@ Create comprehensive integration tests for all features.
         for comment in comments:
             user_login = comment.get("user", {}).get("login", "").lower()
             if any(pattern in user_login for pattern in claude_patterns):
+                has_claude_interaction = True
                 body = comment.get("body", "")
-                # Look for actionable feedback (not just acknowledgments)
-                if body and self._is_actionable_feedback(body):
-                    feedback.append(body)
+                if body:
+                    if self._is_actionable_feedback(body):
+                        # Actionable feedback - needs to be addressed
+                        feedback.append(body)
+                    elif self._is_implicit_approval(body):
+                        # Non-actionable approval-like comment counts as implicit approval
+                        has_approval = True
 
-        # If no Claude Code interaction yet, assume not approved (waiting for review)
-        if not has_approval and not feedback:
-            # Check if Claude Code review workflow has run
-            # If it has run but no feedback, consider it approved
-            return True, []
+        # Critical Issue #6 Fix: If claude_code_review is enabled but no Claude interaction,
+        # we should NOT auto-approve. Return False to indicate pending review.
+        if not has_claude_interaction:
+            # No Claude Code interaction yet - cannot approve without review
+            return False, []
 
         return has_approval, feedback
+
+    def _is_implicit_approval(self, comment_body: str) -> bool:
+        """Check if a comment indicates implicit approval (LGTM, etc.)."""
+        approval_indicators = [
+            "lgtm",
+            "looks good",
+            "approved",
+            "ship it",
+            "great work",
+            "excellent",
+            "perfect",
+            "nice work",
+        ]
+        body_lower = comment_body.lower()
+        return any(indicator in body_lower for indicator in approval_indicators)
 
     def _is_actionable_feedback(self, comment_body: str) -> bool:
         """Determine if a comment contains actionable feedback.
