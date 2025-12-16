@@ -283,6 +283,32 @@ class TestServeFrontend:
             assert response.status_code in [200, 404]
 
 
+class TestWebSocketJSONParsing:
+    """Tests for WebSocket JSON error handling (Issue #11 fix)."""
+
+    def test_websocket_rejects_malformed_json(self, client):
+        """WebSocket should return error for malformed JSON."""
+        with client.websocket_connect("/ws/generate") as websocket:
+            # Send malformed JSON
+            websocket.send_text("not valid json {{{")
+
+            # Should receive error message, not crash
+            response = websocket.receive_json()
+            assert response["type"] == "error"
+            assert "Invalid JSON" in response["message"] or "JSON" in response["message"]
+
+    def test_websocket_rejects_invalid_config(self, client):
+        """WebSocket should return error for invalid config structure."""
+        with client.websocket_connect("/ws/generate") as websocket:
+            # Send valid JSON but invalid config (missing required fields)
+            websocket.send_text('{"invalid": "config"}')
+
+            # Should receive error message about validation
+            response = websocket.receive_json()
+            assert response["type"] == "error"
+            assert "message" in response
+
+
 class TestContextVariables:
     """Tests for context variable helpers (Issue #10 fix)."""
 

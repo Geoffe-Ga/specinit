@@ -329,17 +329,21 @@ class TestGitHubService:
 
     @patch("specinit.github.service.requests.Session")
     def test_merge_pull_request_failure(self, mock_session_class):
-        """Should return False when merge fails."""
+        """Should raise ValueError when merge fails with 405.
+
+        Issue #17 Fix: Now raises specific exceptions instead of returning False.
+        """
         mock_session = MagicMock()
         mock_response = MagicMock()
         mock_response.status_code = 405  # Not mergeable
+        mock_response.json.return_value = {"message": "PR is not mergeable"}
         mock_session.put.return_value = mock_response
         mock_session_class.return_value = mock_session
 
         github = GitHubService(token="test_token")
-        success = github.merge_pull_request("user", "repo", 1)
 
-        assert success is False
+        with pytest.raises(ValueError, match="cannot be merged"):
+            github.merge_pull_request("user", "repo", 1)
 
     @patch("specinit.github.service.requests.Session")
     def test_get_workflow_runs(self, mock_session_class):

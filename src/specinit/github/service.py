@@ -56,6 +56,22 @@ class GitHubService:
                 }
             )
 
+    def close(self) -> None:
+        """Close the session and release resources.
+
+        Issue #9 Fix: Properly close the requests session to prevent resource leaks.
+        """
+        if self.session:
+            self.session.close()
+
+    def __enter__(self) -> "GitHubService":
+        """Enter context manager."""
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        """Exit context manager and close session."""
+        self.close()
+
     @staticmethod
     def get_token() -> str | None:
         """Get GitHub token from keyring."""
@@ -311,12 +327,32 @@ class GitHubService:
         pr_number: int,
         merge_method: str = "squash",
     ) -> bool:
-        """Merge a pull request."""
+        """Merge a pull request.
+
+        Issue #17 Fix: Properly distinguish between different failure modes
+        and raise appropriate exceptions.
+
+        Returns:
+            True if merge was successful.
+
+        Raises:
+            ValueError: If PR cannot be merged (405) or has conflicts (409).
+            RuntimeError: For other API errors.
+        """
         response = self.session.put(
             f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls/{pr_number}/merge",
             json={"merge_method": merge_method},
         )
-        return response.status_code == 200
+
+        if response.status_code == 200:
+            return True
+        elif response.status_code == 405:
+            message = response.json().get("message", "Unknown reason")
+            raise ValueError(f"PR cannot be merged: {message}")
+        elif response.status_code == 409:
+            raise ValueError("PR has merge conflicts that must be resolved first")
+        else:
+            raise RuntimeError(f"Merge failed with status {response.status_code}")
 
     def get_workflow_runs(
         self, owner: str, repo: str, branch: str | None = None
