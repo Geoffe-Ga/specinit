@@ -1,11 +1,19 @@
 """Tests for FastAPI server endpoints."""
 
+import asyncio
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
-from specinit.server.app import app
+from specinit.server.app import (
+    app,
+    get_output_dir,
+    get_shutdown_event,
+    set_output_dir,
+    set_shutdown_event,
+)
 
 
 @pytest.fixture
@@ -273,3 +281,36 @@ class TestServeFrontend:
             response = client.get("/")
             # We just verify it doesn't crash
             assert response.status_code in [200, 404]
+
+
+class TestContextVariables:
+    """Tests for context variable helpers (Issue #10 fix)."""
+
+    def test_get_output_dir_returns_cwd_by_default(self):
+        """get_output_dir should return cwd when not set."""
+        result = get_output_dir()
+        assert result == Path.cwd()
+
+    def test_set_and_get_output_dir(self):
+        """set_output_dir should store value retrievable by get_output_dir."""
+        test_path = Path("/tmp/test-project")
+        set_output_dir(test_path)
+
+        result = get_output_dir()
+        assert result == test_path
+
+    def test_get_shutdown_event_returns_none_by_default(self):
+        """get_shutdown_event should return None when not set."""
+        # Reset by setting to None first
+        set_shutdown_event(None)
+
+        result = get_shutdown_event()
+        assert result is None
+
+    def test_set_and_get_shutdown_event(self):
+        """set_shutdown_event should store value retrievable by get_shutdown_event."""
+        event = asyncio.Event()
+        set_shutdown_event(event)
+
+        result = get_shutdown_event()
+        assert result is event
