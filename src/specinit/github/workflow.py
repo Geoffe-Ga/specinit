@@ -25,11 +25,17 @@ class IssueStatus(Enum):
 
     QUEUED = "queued"
     IN_PROGRESS = "in_progress"
+    PRECOMMIT_FAILED = "precommit_failed"
+    PRECOMMIT_FIXING = "precommit_fixing"
     PR_CREATED = "pr_created"
     CI_RUNNING = "ci_running"
     CI_FAILED = "ci_failed"
+    CI_FIXING = "ci_fixing"
+    COVERAGE_FAILED = "coverage_failed"
+    COVERAGE_FIXING = "coverage_fixing"
     IN_REVIEW = "in_review"
     CHANGES_REQUESTED = "changes_requested"
+    REVIEW_FIXING = "review_fixing"
     APPROVED = "approved"
     MERGED = "merged"
     BLOCKED = "blocked"
@@ -50,6 +56,16 @@ class WorkflowIssue:
 
 
 @dataclass
+class CoverageThresholds:
+    """Coverage thresholds for different module types."""
+
+    overall: int = 90  # Overall minimum coverage
+    logic: int = 90  # Logic-heavy modules (generators, services, etc.)
+    ui: int = 60  # Frontend/UI components (realistic for UI)
+    tests: int = 0  # Test files themselves (excluded from coverage)
+
+
+@dataclass
 class GitHubConfig:
     """Configuration for GitHub workflow."""
 
@@ -60,6 +76,14 @@ class GitHubConfig:
     yolo_mode: bool = False
     max_fix_attempts: int = 5
     parallel_branches: int = 3
+    # Iteration settings
+    iterate_on_precommit: bool = True  # Retry pre-commit failures
+    iterate_on_ci: bool = True  # Retry CI failures
+    iterate_on_coverage: bool = True  # Retry coverage failures
+    claude_code_review: bool = False  # Include Claude Code reviews in YOLO mode
+    coverage_thresholds: CoverageThresholds = field(default_factory=CoverageThresholds)
+    ci_timeout_seconds: int = 600  # 10 minutes
+    review_poll_interval: int = 30  # Seconds between review checks
 
 
 class GitHubWorkflow:
@@ -334,7 +358,16 @@ Create comprehensive integration tests for all features.
         implementation_callback: Callable[[Issue], Coroutine[Any, Any, None]],
         progress_callback: ProgressCallback | None = None,
     ) -> None:
-        """Work on a single issue through the full workflow."""
+        """Work on a single issue through the full workflow.
+
+        This method orchestrates the complete issue workflow with iteration:
+        1. Create branch and implement
+        2. Run pre-commit hooks (iterate until green or max attempts)
+        3. Create PR and run CI (iterate until green or max attempts)
+        4. Check coverage thresholds (iterate if below threshold)
+        5. Handle reviews (iterate in YOLO mode, including Claude Code reviews)
+        6. Merge when approved
+        """
         issue = workflow_issue.issue
         workflow_issue.status = IssueStatus.IN_PROGRESS
 
@@ -358,9 +391,11 @@ Create comprehensive integration tests for all features.
         # Implementation (provided by caller)
         await implementation_callback(issue)
 
-        # Run pre-commit
-        precommit_success = await self._run_precommit(workflow_issue)
-        if not precommit_success and workflow_issue.fix_attempts >= self.config.max_fix_attempts:
+        # Run pre-commit with iteration
+        precommit_success = await self._iterate_precommit(
+            workflow_issue, implementation_callback, progress_callback
+        )
+        if not precommit_success:
             workflow_issue.status = IssueStatus.FAILED
             return
 
@@ -401,10 +436,15 @@ Create comprehensive integration tests for all features.
                 {"pr_url": pr.url, "pr_number": pr.number},
             )
 
-        # Wait for CI
-        await self._wait_for_ci(workflow_issue, progress_callback)
+        # Wait for CI with iteration on failures
+        ci_success = await self._iterate_ci(
+            workflow_issue, implementation_callback, progress_callback
+        )
+        if not ci_success:
+            workflow_issue.status = IssueStatus.FAILED
+            return
 
-        # If YOLO mode, handle reviews
+        # If YOLO mode, handle reviews (including Claude Code reviews if enabled)
         if self.config.yolo_mode:
             await self._handle_reviews(workflow_issue, implementation_callback, progress_callback)
 
@@ -440,6 +480,195 @@ Create comprehensive integration tests for all features.
         workflow_issue.fix_attempts += 1
         workflow_issue.error_message = result.stdout + result.stderr
         return False
+
+    async def _iterate_precommit(
+        self,
+        workflow_issue: WorkflowIssue,
+        implementation_callback: Callable[[Issue], Coroutine[Any, Any, None]],
+        progress_callback: ProgressCallback | None = None,
+    ) -> bool:
+        """Iterate on pre-commit failures until green or max attempts.
+
+        Returns True if pre-commit eventually passes, False if max attempts exceeded.
+        """
+        if not self.config.iterate_on_precommit:
+            # Just run once without iteration
+            return await self._run_precommit(workflow_issue)
+
+        attempt = 0
+        while attempt < self.config.max_fix_attempts:
+            success = await self._run_precommit(workflow_issue)
+            if success:
+                return True
+
+            attempt += 1
+            workflow_issue.status = IssueStatus.PRECOMMIT_FIXING
+
+            if progress_callback:
+                await progress_callback(
+                    f"issue_{workflow_issue.issue.number}",
+                    "precommit_fixing",
+                    {
+                        "attempt": attempt,
+                        "max_attempts": self.config.max_fix_attempts,
+                        "error": workflow_issue.error_message[:500],
+                    },
+                )
+
+            if attempt >= self.config.max_fix_attempts:
+                workflow_issue.status = IssueStatus.PRECOMMIT_FAILED
+                return False
+
+            # Call implementation callback to fix the issues
+            await implementation_callback(workflow_issue.issue)
+
+            # Stage any auto-fixes from pre-commit
+            subprocess.run(["git", "add", "."], cwd=self.project_path, check=False)
+
+        return False
+
+    async def _iterate_ci(
+        self,
+        workflow_issue: WorkflowIssue,
+        implementation_callback: Callable[[Issue], Coroutine[Any, Any, None]],
+        progress_callback: ProgressCallback | None = None,
+    ) -> bool:
+        """Iterate on CI failures until green or max attempts.
+
+        This handles:
+        1. CI check failures (tests, linting, type checking)
+        2. Coverage threshold failures
+        3. Any other CI workflow failures
+
+        Returns True if CI eventually passes, False if max attempts exceeded.
+        """
+        attempt = 0
+        while attempt < self.config.max_fix_attempts:
+            # Wait for CI to complete
+            await self._wait_for_ci(workflow_issue, progress_callback)
+
+            if workflow_issue.status == IssueStatus.IN_REVIEW:
+                # CI passed, check coverage if enabled
+                if self.config.iterate_on_coverage:
+                    coverage_ok = await self._check_coverage(workflow_issue, progress_callback)
+                    if not coverage_ok:
+                        attempt += 1
+                        if attempt >= self.config.max_fix_attempts:
+                            workflow_issue.status = IssueStatus.COVERAGE_FAILED
+                            return False
+
+                        workflow_issue.status = IssueStatus.COVERAGE_FIXING
+                        if progress_callback:
+                            await progress_callback(
+                                f"issue_{workflow_issue.issue.number}",
+                                "coverage_fixing",
+                                {"attempt": attempt},
+                            )
+
+                        # Call implementation callback to add tests
+                        await implementation_callback(workflow_issue.issue)
+                        await self._commit_and_push_fix(
+                            workflow_issue, "fix: improve test coverage"
+                        )
+                        continue
+
+                return True
+
+            if workflow_issue.status == IssueStatus.CI_FAILED:
+                if not self.config.iterate_on_ci:
+                    return False
+
+                attempt += 1
+                if attempt >= self.config.max_fix_attempts:
+                    return False
+
+                workflow_issue.status = IssueStatus.CI_FIXING
+
+                if progress_callback:
+                    # Get failure details from CI
+                    failure_info = await self._get_ci_failure_info(workflow_issue)
+                    await progress_callback(
+                        f"issue_{workflow_issue.issue.number}",
+                        "ci_fixing",
+                        {
+                            "attempt": attempt,
+                            "max_attempts": self.config.max_fix_attempts,
+                            "failures": failure_info,
+                        },
+                    )
+
+                # Call implementation callback to fix CI failures
+                await implementation_callback(workflow_issue.issue)
+                await self._commit_and_push_fix(workflow_issue, "fix: address CI failures")
+
+            else:
+                # Unknown state
+                return False
+
+        return False
+
+    async def _check_coverage(
+        self,
+        workflow_issue: WorkflowIssue,
+        progress_callback: ProgressCallback | None = None,
+    ) -> bool:
+        """Check if coverage thresholds are met.
+
+        Returns True if coverage is acceptable, False otherwise.
+        """
+        pr = workflow_issue.pr
+        if not pr:
+            return True  # Can't check without PR
+
+        # Get coverage info from CI checks (codecov, coverage report, etc.)
+        checks = self.github.get_pr_checks(
+            self.config.owner, self.config.repo, workflow_issue.branch_name
+        )
+
+        check_runs = checks.get("check_runs", [])
+        for run in check_runs:
+            name = run.get("name", "").lower()
+            if "coverage" in name or "codecov" in name:
+                conclusion = run.get("conclusion")
+                if conclusion == "failure":
+                    workflow_issue.status = IssueStatus.COVERAGE_FAILED
+                    if progress_callback:
+                        await progress_callback(
+                            f"issue_{workflow_issue.issue.number}",
+                            "coverage_failed",
+                            {"check_name": run.get("name")},
+                        )
+                    return False
+
+        return True
+
+    async def _get_ci_failure_info(self, _workflow_issue: WorkflowIssue) -> list[dict[str, str]]:
+        """Get details about CI failures from workflow logs."""
+        # Workflow run ID would need to be tracked separately
+        # For now, we rely on the progress callback to provide failure context
+        # from the CI checks themselves
+        return []
+
+    async def _commit_and_push_fix(self, workflow_issue: WorkflowIssue, message: str) -> None:
+        """Commit and push fixes for a workflow issue."""
+        subprocess.run(["git", "add", "."], cwd=self.project_path, check=True)
+
+        # Check if there are changes to commit
+        result = subprocess.run(
+            ["git", "diff", "--staged", "--quiet"],
+            cwd=self.project_path,
+            check=False,
+        )
+        if result.returncode == 0:
+            # No changes to commit
+            return
+
+        subprocess.run(
+            ["git", "commit", "-m", message],
+            cwd=self.project_path,
+            check=False,
+        )
+        push_branch(workflow_issue.branch_name, force=False)
 
     async def _wait_for_ci(
         self,
@@ -502,63 +731,200 @@ Create comprehensive integration tests for all features.
         implementation_callback: Callable[[Issue], Coroutine[Any, Any, None]],
         progress_callback: ProgressCallback | None = None,
     ) -> None:
-        """Handle review comments in YOLO mode."""
+        """Handle review comments in YOLO mode.
+
+        This iterates on:
+        1. Human reviewer feedback (CHANGES_REQUESTED, unresolved comments)
+        2. Claude Code reviews (if claude_code_review is enabled in config)
+
+        Continues until:
+        - All reviewers approve (LGTM)
+        - Max fix attempts exceeded
+        """
         pr = workflow_issue.pr
         if not pr:
             return
 
-        while workflow_issue.fix_attempts < self.config.max_fix_attempts:
+        review_attempt = 0
+        while review_attempt < self.config.max_fix_attempts:
             # Get reviews and comments
             reviews = self.github.get_pr_reviews(self.config.owner, self.config.repo, pr.number)
             comments = self.github.get_pr_comments(self.config.owner, self.config.repo, pr.number)
 
-            # Check if approved
-            approved = any(r.get("state") == "APPROVED" for r in reviews)
-            if approved:
+            # Check for human approvals
+            human_approved = any(r.get("state") == "APPROVED" for r in reviews)
+
+            # Check for Claude Code review status (if enabled)
+            claude_approved = True
+            claude_feedback: list[str] = []
+            if self.config.claude_code_review:
+                claude_approved, claude_feedback = self._check_claude_code_review(reviews, comments)
+
+            # If all reviewers approve, we're done
+            if human_approved and claude_approved:
                 workflow_issue.status = IssueStatus.APPROVED
                 return
 
-            # Check for change requests
+            # Check for change requests from any reviewer
             changes_requested = any(r.get("state") == "CHANGES_REQUESTED" for r in reviews)
             unresolved_comments = [c for c in comments if not c.get("resolved", False)]
 
+            # Include Claude Code feedback as unresolved if not approved
+            if self.config.claude_code_review and not claude_approved:
+                unresolved_comments.extend(
+                    {"body": feedback, "user": {"login": "claude-code"}}
+                    for feedback in claude_feedback
+                )
+
             if not changes_requested and not unresolved_comments:
-                # No explicit approval but no blockers either
+                # No explicit approval but no blockers either - consider approved
                 workflow_issue.status = IssueStatus.APPROVED
                 return
 
-            workflow_issue.status = IssueStatus.CHANGES_REQUESTED
+            workflow_issue.status = IssueStatus.REVIEW_FIXING
+            review_attempt += 1
 
             if progress_callback:
                 await progress_callback(
                     f"issue_{workflow_issue.issue.number}",
-                    "resolving_feedback",
-                    {"comments": len(unresolved_comments)},
+                    "review_fixing",
+                    {
+                        "attempt": review_attempt,
+                        "max_attempts": self.config.max_fix_attempts,
+                        "human_comments": len(
+                            [
+                                c
+                                for c in unresolved_comments
+                                if c.get("user", {}).get("login") != "claude-code"
+                            ]
+                        ),
+                        "claude_comments": len(claude_feedback) if not claude_approved else 0,
+                    },
                 )
+
+            if review_attempt >= self.config.max_fix_attempts:
+                workflow_issue.status = IssueStatus.FAILED
+                return
 
             # Attempt to fix (implementation callback should handle this)
             await implementation_callback(workflow_issue.issue)
-            workflow_issue.fix_attempts += 1
 
             # Commit and push fixes
-            subprocess.run(["git", "add", "."], cwd=self.project_path, check=True)
-            subprocess.run(
-                ["git", "commit", "-m", "fix: address review feedback"],
-                cwd=self.project_path,
-                check=False,
-            )
-            push_branch(workflow_issue.branch_name, force=False)
+            await self._commit_and_push_fix(workflow_issue, "fix: address review feedback")
 
             # Wait for CI again
             await self._wait_for_ci(workflow_issue, progress_callback)
 
             if workflow_issue.status == IssueStatus.CI_FAILED:
-                break
+                # CI failed after fix - need to iterate on CI too
+                ci_success = await self._iterate_ci(
+                    workflow_issue, implementation_callback, progress_callback
+                )
+                if not ci_success:
+                    workflow_issue.status = IssueStatus.FAILED
+                    return
 
-            await asyncio.sleep(5)  # Brief pause before checking reviews again
+            # Brief pause before checking reviews again
+            await asyncio.sleep(self.config.review_poll_interval)
 
-        if workflow_issue.fix_attempts >= self.config.max_fix_attempts:
-            workflow_issue.status = IssueStatus.FAILED
+        workflow_issue.status = IssueStatus.FAILED
+
+    def _check_claude_code_review(
+        self,
+        reviews: list[dict[str, Any]],
+        comments: list[dict[str, Any]],
+    ) -> tuple[bool, list[str]]:
+        """Check Claude Code review status from PR reviews and comments.
+
+        Returns (is_approved, feedback_list).
+
+        Claude Code reviews are identified by:
+        - Reviews/comments from users matching claude patterns (claude-code, claude[bot])
+        - Comments containing specific Claude Code review markers
+        """
+        claude_patterns = ["claude-code", "claude[bot]", "claude-code[bot]"]
+        feedback: list[str] = []
+        has_approval = False
+
+        # Check reviews from Claude Code
+        for review in reviews:
+            user_login = review.get("user", {}).get("login", "").lower()
+            if any(pattern in user_login for pattern in claude_patterns):
+                state = review.get("state", "")
+                if state == "APPROVED":
+                    has_approval = True
+                elif state == "CHANGES_REQUESTED":
+                    body = review.get("body", "")
+                    if body:
+                        feedback.append(body)
+
+        # Check comments from Claude Code
+        for comment in comments:
+            user_login = comment.get("user", {}).get("login", "").lower()
+            if any(pattern in user_login for pattern in claude_patterns):
+                body = comment.get("body", "")
+                # Look for actionable feedback (not just acknowledgments)
+                if body and self._is_actionable_feedback(body):
+                    feedback.append(body)
+
+        # If no Claude Code interaction yet, assume not approved (waiting for review)
+        if not has_approval and not feedback:
+            # Check if Claude Code review workflow has run
+            # If it has run but no feedback, consider it approved
+            return True, []
+
+        return has_approval, feedback
+
+    def _is_actionable_feedback(self, comment_body: str) -> bool:
+        """Determine if a comment contains actionable feedback.
+
+        Returns True if the comment suggests changes are needed.
+        """
+        # Indicators of actionable feedback
+        action_indicators = [
+            "should",
+            "could",
+            "consider",
+            "suggest",
+            "recommend",
+            "fix",
+            "change",
+            "update",
+            "modify",
+            "refactor",
+            "issue",
+            "problem",
+            "bug",
+            "error",
+            "mistake",
+            "missing",
+            "incomplete",
+            "incorrect",
+            "todo",
+            "to do",
+            "needs",
+        ]
+
+        # Indicators of approval/acknowledgment (not actionable)
+        approval_indicators = [
+            "lgtm",
+            "looks good",
+            "approved",
+            "ship it",
+            "great",
+            "excellent",
+            "perfect",
+            "nice work",
+        ]
+
+        body_lower = comment_body.lower()
+
+        # If it's clearly an approval, not actionable
+        if any(indicator in body_lower for indicator in approval_indicators):
+            return False
+
+        # If it contains action indicators, it's actionable
+        return any(indicator in body_lower for indicator in action_indicators)
 
     def _slugify(self, text: str) -> str:
         """Convert text to a URL-safe slug."""

@@ -137,3 +137,10 @@ exclude_lines = [
     "raise AssertionError",
     "raise NotImplementedError",
 ]
+# Coverage thresholds - enforced in CI
+fail_under = 90
+
+# Per-module coverage thresholds (checked by scripts/test.sh)
+# Logic-heavy modules: 90%+
+# Frontend/UI: 60%+ (realistic for UI components)
+# See scripts/test.sh for enforcement
