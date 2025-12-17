@@ -15,6 +15,22 @@ from specinit.storage.history import HistoryManager
 console = Console()
 
 
+def validate_port(_ctx: click.Context, _param: click.Parameter, value: int) -> int:
+    """Validate port is in valid range (1024-65535).
+
+    Issue #12 Fix: Validate port number to avoid confusing runtime errors.
+    Rejects privileged ports (< 1024) that require elevated permissions
+    and invalid ports (> 65535).
+    """
+    if value < 1024:
+        raise click.BadParameter(
+            f"Port {value} requires elevated permissions. Use a port between 1024 and 65535."
+        )
+    if value > 65535:
+        raise click.BadParameter(f"Port {value} is invalid. Use a port between 1024 and 65535.")
+    return value
+
+
 @click.group()
 @click.version_option(version=__version__, prog_name="specinit")
 def cli() -> None:
@@ -66,7 +82,8 @@ def init(api_key: str) -> None:
 @click.option(
     "--port",
     default=8765,
-    help="Port for the local web server.",
+    callback=validate_port,
+    help="Port for the local web server (1024-65535).",
 )
 @click.option(
     "--no-browser",

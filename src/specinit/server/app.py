@@ -11,7 +11,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from specinit.generator.orchestrator import GenerationOrchestrator
 from specinit.github.service import GitHubService
@@ -185,14 +185,30 @@ async def estimate_cost(config: ProjectConfig) -> CostEstimate:
 
 @app.websocket("/ws/generate")
 async def generate_project(websocket: WebSocket) -> None:
-    """WebSocket endpoint for project generation with progress updates."""
+    """WebSocket endpoint for project generation with progress updates.
+
+    Issue #11 Fix: Properly handle JSON parse errors and validation errors
+    instead of crashing the WebSocket connection.
+    """
     await websocket.accept()
 
     try:
         # Receive project configuration
         data = await websocket.receive_text()
-        config_data = json.loads(data)
-        project_config = ProjectConfig(**config_data)
+
+        # Issue #11 Fix: Handle JSON parse errors gracefully
+        try:
+            config_data = json.loads(data)
+        except json.JSONDecodeError as e:
+            await websocket.send_json({"type": "error", "message": f"Invalid JSON: {e.msg}"})
+            return
+
+        # Issue #11 Fix: Handle validation errors gracefully
+        try:
+            project_config = ProjectConfig(**config_data)
+        except ValidationError as e:
+            await websocket.send_json({"type": "error", "message": f"Invalid configuration: {e}"})
+            return
 
         # Create orchestrator using context variable for output dir
         orchestrator = GenerationOrchestrator(

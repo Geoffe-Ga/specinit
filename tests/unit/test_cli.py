@@ -184,6 +184,65 @@ class TestConfigCommands:
             mock_instance.reset.assert_called_once()
 
 
+class TestPortValidation:
+    """Tests for port validation in CLI (Issue #12 fix)."""
+
+    def test_port_below_1024_rejected(self, runner: CliRunner, _mock_home: Path) -> None:
+        """Ports below 1024 (privileged) should be rejected."""
+        with patch("specinit.cli.main.ConfigManager") as mock_config:
+            mock_instance = MagicMock()
+            mock_instance.get_api_key.return_value = "sk-ant-test-key"
+            mock_config.return_value = mock_instance
+
+            result = runner.invoke(cli, ["new", "--port", "80", "--no-browser"])
+
+            assert result.exit_code != 0
+            assert "1024" in result.output or "privileged" in result.output.lower()
+
+    def test_port_above_65535_rejected(self, runner: CliRunner, _mock_home: Path) -> None:
+        """Ports above 65535 should be rejected."""
+        with patch("specinit.cli.main.ConfigManager") as mock_config:
+            mock_instance = MagicMock()
+            mock_instance.get_api_key.return_value = "sk-ant-test-key"
+            mock_config.return_value = mock_instance
+
+            result = runner.invoke(cli, ["new", "--port", "70000", "--no-browser"])
+
+            assert result.exit_code != 0
+            assert "65535" in result.output or "invalid" in result.output.lower()
+
+    def test_valid_port_accepted(self, runner: CliRunner, _mock_home: Path) -> None:
+        """Valid ports (1024-65535) should be accepted."""
+        with (
+            patch("specinit.cli.main.ConfigManager") as mock_config,
+            patch("specinit.cli.main.start_server") as mock_server,
+            patch("specinit.cli.main.webbrowser"),
+        ):
+            mock_instance = MagicMock()
+            mock_instance.get_api_key.return_value = "sk-ant-test-key"
+            mock_config.return_value = mock_instance
+
+            result = runner.invoke(cli, ["new", "--port", "3000", "--no-browser"])
+
+            assert result.exit_code == 0
+            mock_server.assert_called_once()
+
+    def test_port_1024_accepted(self, runner: CliRunner, _mock_home: Path) -> None:
+        """Port 1024 (boundary) should be accepted."""
+        with (
+            patch("specinit.cli.main.ConfigManager") as mock_config,
+            patch("specinit.cli.main.start_server") as _mock_server,
+            patch("specinit.cli.main.webbrowser"),
+        ):
+            mock_instance = MagicMock()
+            mock_instance.get_api_key.return_value = "sk-ant-test-key"
+            mock_config.return_value = mock_instance
+
+            result = runner.invoke(cli, ["new", "--port", "1024", "--no-browser"])
+
+            assert result.exit_code == 0
+
+
 class TestNewCommandWithOptions:
     """Tests for new command with various options."""
 
