@@ -72,6 +72,38 @@ class GitHubService:
         """Exit context manager and close session."""
         self.close()
 
+    def _validate_json_response(self, response: requests.Response) -> None:
+        """Validate that response has JSON Content-Type.
+
+        Issue #14 Fix: Verify Content-Type before parsing JSON to avoid
+        unexpected errors when server returns non-JSON responses.
+
+        Raises:
+            ValueError: If response is not JSON content type.
+        """
+        content_type = response.headers.get("Content-Type", "")
+        if not content_type.startswith("application/json"):
+            raise ValueError(
+                f"Expected JSON response but got Content-Type: {content_type!r}. "
+                f"Response body: {response.text[:500]}"
+            )
+
+    def _raise_for_status_with_details(self, response: requests.Response) -> None:
+        """Raise HTTPError with response body details if request failed.
+
+        Issue #16 Fix: Include response body in exception message for
+        easier debugging of API errors.
+        """
+        try:
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            # Enhance error message with response details
+            error_details = response.text[:1000] if response.text else "No response body"
+            raise requests.exceptions.HTTPError(
+                f"{e}. Response details: {error_details}",
+                response=response,
+            ) from e
+
     @staticmethod
     def get_token() -> str | None:
         """Get GitHub token from keyring."""
@@ -97,7 +129,8 @@ class GitHubService:
             raise ValueError("No GitHub token configured")
 
         response = self.session.get(f"{GITHUB_API_BASE}/user")
-        response.raise_for_status()
+        self._raise_for_status_with_details(response)
+        self._validate_json_response(response)
         return cast(dict[str, Any], response.json())
 
     @staticmethod
@@ -161,7 +194,7 @@ class GitHubService:
             f"{GITHUB_API_BASE}/repos/{owner}/{repo}/issues",
             json=data,
         )
-        response.raise_for_status()
+        self._raise_for_status_with_details(response)
         result = response.json()
 
         return Issue(

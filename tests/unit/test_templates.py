@@ -101,3 +101,62 @@ class TestTemplateSelector:
         for template_id, template in TEMPLATES.items():
             directories = template["directory_structure"]
             assert any("plan" in d for d in directories), f"Template {template_id} missing plan/"
+
+
+class TestEmptyInputEdgeCases:
+    """Tests for empty input edge cases (Issue #15 fix)."""
+
+    def test_empty_platforms_and_tech_stack_returns_default(self):
+        """Empty platforms and tech_stack should return deterministic default template."""
+        selector = TemplateSelector()
+
+        # Call multiple times to verify deterministic behavior
+        template1 = selector.select(platforms=[], tech_stack={})
+        template2 = selector.select(platforms=[], tech_stack={"frontend": [], "backend": []})
+        template3 = selector.select(platforms=[], tech_stack={})
+
+        # All should return the same default template
+        assert template1["name"] == template2["name"] == template3["name"]
+        # Default should be react-fastapi
+        assert template1["name"] == "React + FastAPI Web App"
+
+    def test_no_matching_platforms_returns_default(self):
+        """Non-matching platforms should return default template."""
+        selector = TemplateSelector()
+
+        template = selector.select(
+            platforms=["nonexistent-platform"],
+            tech_stack={"frontend": [], "backend": []},
+        )
+
+        # Should return default template
+        assert template["name"] == "React + FastAPI Web App"
+
+    def test_no_matching_tech_stack_returns_default(self):
+        """Non-matching tech stack should return default template."""
+        selector = TemplateSelector()
+
+        template = selector.select(
+            platforms=[],
+            tech_stack={"frontend": ["nonexistent-tech"], "backend": ["unknown-backend"]},
+        )
+
+        # Should return default template
+        assert template["name"] == "React + FastAPI Web App"
+
+    def test_all_zero_scores_returns_default_deterministically(self):
+        """When all templates score 0, should always return the same default."""
+        selector = TemplateSelector()
+
+        # Run multiple times to ensure determinism
+        results = []
+        for _ in range(10):
+            template = selector.select(
+                platforms=["xyz"],
+                tech_stack={"frontend": ["abc"], "backend": ["def"]},
+            )
+            results.append(template["name"])
+
+        # All results should be identical
+        assert len(set(results)) == 1
+        assert results[0] == "React + FastAPI Web App"
