@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+from requests.exceptions import HTTPError
 
 from specinit.github.service import GitHubService
 
@@ -138,3 +139,104 @@ class TestParseRepoUrl:
         """Should raise ValueError for invalid URLs."""
         with pytest.raises(ValueError, match="Invalid GitHub URL"):
             GitHubService.parse_repo_url("not-a-valid-url")
+
+
+class TestContentTypeValidation:
+    """Tests for HTTP Content-Type validation (Issue #14 fix)."""
+
+    def test_non_json_response_raises_error(self):
+        """Non-JSON response should raise appropriate error."""
+        with patch("specinit.github.service.requests.Session") as mock_session_cls:
+            mock_session = MagicMock()
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.headers = {"Content-Type": "text/html"}
+            mock_response.text = "<html>Error page</html>"
+            mock_response.raise_for_status = MagicMock()
+            mock_session.get.return_value = mock_response
+            mock_session_cls.return_value = mock_session
+
+            service = GitHubService(token="test-token")
+
+            with pytest.raises(ValueError, match="Expected JSON response"):
+                service.validate_token()
+
+    def test_json_content_type_with_charset_accepted(self):
+        """JSON Content-Type with charset should be accepted."""
+        with patch("specinit.github.service.requests.Session") as mock_session_cls:
+            mock_session = MagicMock()
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.headers = {"Content-Type": "application/json; charset=utf-8"}
+            mock_response.json.return_value = {"login": "testuser"}
+            mock_response.raise_for_status = MagicMock()
+            mock_session.get.return_value = mock_response
+            mock_session_cls.return_value = mock_session
+
+            service = GitHubService(token="test-token")
+            result = service.validate_token()
+
+            assert result["login"] == "testuser"
+
+    def test_missing_content_type_raises_error(self):
+        """Missing Content-Type header should raise appropriate error."""
+        with patch("specinit.github.service.requests.Session") as mock_session_cls:
+            mock_session = MagicMock()
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.headers = {}
+            mock_response.text = "some response"
+            mock_response.raise_for_status = MagicMock()
+            mock_session.get.return_value = mock_response
+            mock_session_cls.return_value = mock_session
+
+            service = GitHubService(token="test-token")
+
+            with pytest.raises(ValueError, match="Expected JSON response"):
+                service.validate_token()
+
+
+class TestAPIErrorDetails:
+    """Tests for API exception handling with response details (Issue #16 fix)."""
+
+    def test_api_error_includes_response_body(self):
+        """API errors should include response body in exception message."""
+        with patch("specinit.github.service.requests.Session") as mock_session_cls:
+            mock_session = MagicMock()
+            mock_response = MagicMock()
+            mock_response.status_code = 401
+            mock_response.text = '{"message": "Bad credentials"}'
+            mock_response.headers = {"Content-Type": "application/json"}
+            mock_response.raise_for_status.side_effect = HTTPError("401 Client Error: Unauthorized")
+            mock_session.get.return_value = mock_response
+            mock_session_cls.return_value = mock_session
+
+            service = GitHubService(token="invalid-token")
+
+            with pytest.raises(HTTPError) as exc_info:
+                service.validate_token()
+
+            # The error message should contain response details
+            assert "Bad credentials" in str(exc_info.value)
+
+    def test_create_issue_error_includes_response_body(self):
+        """Issue creation errors should include response body details."""
+        with patch("specinit.github.service.requests.Session") as mock_session_cls:
+            mock_session = MagicMock()
+            mock_response = MagicMock()
+            mock_response.status_code = 422
+            mock_response.text = '{"message": "Validation Failed", "errors": [{"field": "title"}]}'
+            mock_response.headers = {"Content-Type": "application/json"}
+            mock_response.raise_for_status.side_effect = HTTPError(
+                "422 Client Error: Unprocessable Entity"
+            )
+            mock_session.post.return_value = mock_response
+            mock_session_cls.return_value = mock_session
+
+            service = GitHubService(token="test-token")
+
+            with pytest.raises(HTTPError) as exc_info:
+                service.create_issue("owner", "repo", "Title", "Body")
+
+            # Error should mention the validation failure
+            assert "Validation Failed" in str(exc_info.value)

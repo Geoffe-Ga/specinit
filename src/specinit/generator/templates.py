@@ -144,9 +144,10 @@ class TemplateSelector:
                 best_score = score
                 best_template = template
 
-        # Default to react-fastapi if no good match
-        if best_template is None:
-            best_template = TEMPLATES["react-fastapi"]
+        # Issue #15 Fix: Always return react-fastapi as default when no match found
+        # or when all templates score 0 (to ensure deterministic behavior)
+        if best_template is None or best_score == 0:
+            return TEMPLATES["react-fastapi"]
 
         return best_template
 

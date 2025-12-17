@@ -73,6 +73,27 @@ Before stating that a task is complete, Claude must:
 3. Check that no new warnings or deprecations were introduced
 4. Verify the change actually solves the original problem
 
+### Rule 5: Efficient CI Monitoring
+
+**Do not use blocking `--watch` commands for CI checks.** These waste resources and context.
+
+```bash
+# FORBIDDEN - Blocks indefinitely, wastes context
+gh pr checks 21 --watch
+
+# CORRECT - Check once without blocking
+gh pr checks 21
+
+# CORRECT - Check status and move on
+gh pr view 21 --json statusCheckRollup
+```
+
+**CI monitoring guidelines:**
+- Check CI status once after pushing, then proceed with other work
+- If CI is still pending, check back after completing another task
+- Never poll CI status repeatedly in a loop
+- Trust that CI will complete; check the PR comments for review feedback
+
 ## Project Overview
 
 SpecInit is a local-first CLI tool that transforms project ideas into working codebases using Claude AI. Users answer 5-6 questions through a web interface, and the tool orchestrates Claude API calls to generate complete projects with documentation, tests, and configuration.

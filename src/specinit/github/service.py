@@ -72,6 +72,38 @@ class GitHubService:
         """Exit context manager and close session."""
         self.close()
 
+    def _validate_json_response(self, response: requests.Response) -> None:
+        """Validate that response has JSON Content-Type.
+
+        Issue #14 Fix: Verify Content-Type before parsing JSON to avoid
+        unexpected errors when server returns non-JSON responses.
+
+        Raises:
+            ValueError: If response is not JSON content type.
+        """
+        content_type = response.headers.get("Content-Type", "")
+        if not content_type.startswith("application/json"):
+            raise ValueError(
+                f"Expected JSON response but got Content-Type: {content_type!r}. "
+                f"Response body: {response.text[:500]}"
+            )
+
+    def _raise_for_status_with_details(self, response: requests.Response) -> None:
+        """Raise HTTPError with response body details if request failed.
+
+        Issue #16 Fix: Include response body in exception message for
+        easier debugging of API errors.
+        """
+        try:
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            # Enhance error message with response details
+            error_details = response.text[:1000] if response.text else "No response body"
+            raise requests.exceptions.HTTPError(
+                f"{e}. Response details: {error_details}",
+                response=response,
+            ) from e
+
     @staticmethod
     def get_token() -> str | None:
         """Get GitHub token from keyring."""
@@ -97,7 +129,8 @@ class GitHubService:
             raise ValueError("No GitHub token configured")
 
         response = self.session.get(f"{GITHUB_API_BASE}/user")
-        response.raise_for_status()
+        self._raise_for_status_with_details(response)
+        self._validate_json_response(response)
         return cast(dict[str, Any], response.json())
 
     @staticmethod
@@ -138,7 +171,8 @@ class GitHubService:
                 "auto_init": auto_init,
             },
         )
-        response.raise_for_status()
+        self._raise_for_status_with_details(response)
+        self._validate_json_response(response)
         return cast(dict[str, Any], response.json())
 
     def create_issue(
@@ -161,7 +195,8 @@ class GitHubService:
             f"{GITHUB_API_BASE}/repos/{owner}/{repo}/issues",
             json=data,
         )
-        response.raise_for_status()
+        self._raise_for_status_with_details(response)
+        self._validate_json_response(response)
         result = response.json()
 
         return Issue(
@@ -189,7 +224,8 @@ class GitHubService:
             f"{GITHUB_API_BASE}/repos/{owner}/{repo}/issues",
             params=params,
         )
-        response.raise_for_status()
+        self._raise_for_status_with_details(response)
+        self._validate_json_response(response)
 
         return [
             Issue(
@@ -210,7 +246,7 @@ class GitHubService:
             f"{GITHUB_API_BASE}/repos/{owner}/{repo}/issues/{issue_number}",
             json={"state": "closed"},
         )
-        response.raise_for_status()
+        self._raise_for_status_with_details(response)
 
     def create_milestone(
         self,
@@ -224,7 +260,8 @@ class GitHubService:
             f"{GITHUB_API_BASE}/repos/{owner}/{repo}/milestones",
             json={"title": title, "description": description},
         )
-        response.raise_for_status()
+        self._raise_for_status_with_details(response)
+        self._validate_json_response(response)
         result = response.json()["number"]
         assert isinstance(result, int)
         return result
@@ -244,7 +281,7 @@ class GitHubService:
         )
         # Ignore 422 (already exists)
         if response.status_code not in (201, 422):
-            response.raise_for_status()
+            self._raise_for_status_with_details(response)
 
     def create_pull_request(
         self,
@@ -265,7 +302,8 @@ class GitHubService:
                 "base": base,
             },
         )
-        response.raise_for_status()
+        self._raise_for_status_with_details(response)
+        self._validate_json_response(response)
         result = response.json()
 
         return PullRequest(
@@ -282,7 +320,8 @@ class GitHubService:
     def get_pull_request(self, owner: str, repo: str, pr_number: int) -> PullRequest:
         """Get a pull request."""
         response = self.session.get(f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls/{pr_number}")
-        response.raise_for_status()
+        self._raise_for_status_with_details(response)
+        self._validate_json_response(response)
         result = response.json()
 
         return PullRequest(
@@ -301,7 +340,8 @@ class GitHubService:
         response = self.session.get(
             f"{GITHUB_API_BASE}/repos/{owner}/{repo}/commits/{ref}/check-runs"
         )
-        response.raise_for_status()
+        self._raise_for_status_with_details(response)
+        self._validate_json_response(response)
         return cast(dict[str, Any], response.json())
 
     def get_pr_reviews(self, owner: str, repo: str, pr_number: int) -> list[dict[str, Any]]:
@@ -309,7 +349,8 @@ class GitHubService:
         response = self.session.get(
             f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls/{pr_number}/reviews"
         )
-        response.raise_for_status()
+        self._raise_for_status_with_details(response)
+        self._validate_json_response(response)
         return cast(list[dict[str, Any]], response.json())
 
     def get_pr_comments(self, owner: str, repo: str, pr_number: int) -> list[dict[str, Any]]:
@@ -317,7 +358,8 @@ class GitHubService:
         response = self.session.get(
             f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls/{pr_number}/comments"
         )
-        response.raise_for_status()
+        self._raise_for_status_with_details(response)
+        self._validate_json_response(response)
         return cast(list[dict[str, Any]], response.json())
 
     def merge_pull_request(
@@ -347,7 +389,12 @@ class GitHubService:
         if response.status_code == 200:
             return True
         elif response.status_code == 405:
-            message = response.json().get("message", "Unknown reason")
+            # Try to get error message from JSON response, fall back to generic message
+            try:
+                self._validate_json_response(response)
+                message = response.json().get("message", "Unknown reason")
+            except ValueError:
+                message = "Unknown reason (non-JSON response)"
             raise ValueError(f"PR cannot be merged: {message}")
         elif response.status_code == 409:
             raise ValueError("PR has merge conflicts that must be resolved first")
@@ -366,7 +413,8 @@ class GitHubService:
             f"{GITHUB_API_BASE}/repos/{owner}/{repo}/actions/runs",
             params=params,
         )
-        response.raise_for_status()
+        self._raise_for_status_with_details(response)
+        self._validate_json_response(response)
         data = cast(dict[str, Any], response.json())
         return cast(list[dict[str, Any]], data.get("workflow_runs", []))
 
