@@ -10,7 +10,9 @@ Get from zero to generating projects in under 5 minutes.
 
 ## Installation
 
-### Option 1: Install with pipx (Recommended for macOS/Linux)
+> **Note**: SpecInit is not yet published to PyPI. Install directly from GitHub using one of the methods below.
+
+### Option 1: Install with pipx from GitHub (Recommended)
 
 [pipx](https://pipx.pypa.io/) installs Python CLI tools in isolated environments, avoiding system Python conflicts.
 
@@ -18,45 +20,54 @@ Get from zero to generating projects in under 5 minutes.
 # Install pipx if you don't have it
 brew install pipx  # macOS
 # or: sudo apt install pipx  # Ubuntu/Debian
-# or: pip install --user pipx  # Other systems
 
 pipx ensurepath  # Add pipx to your PATH (restart terminal after)
 
-# Install SpecInit
-pipx install specinit
+# Install SpecInit from GitHub
+pipx install git+https://github.com/Geoffe-Ga/specinit.git
 ```
 
 ### Option 2: Install in a Virtual Environment
 
-If you see `externally-managed-environment` errors, use a virtual environment:
+If you see `externally-managed-environment` errors or prefer manual setup:
 
 ```bash
 # Create and activate a virtual environment
 python3 -m venv ~/.specinit-venv
 source ~/.specinit-venv/bin/activate  # Windows: ~/.specinit-venv\Scripts\activate
 
-# Install SpecInit
-pip install specinit
+# Install SpecInit from GitHub
+pip install git+https://github.com/Geoffe-Ga/specinit.git
 
-# Add to your shell profile for persistence (optional)
-echo 'alias specinit="~/.specinit-venv/bin/specinit"' >> ~/.zshrc  # or ~/.bashrc
+# Verify installation
+specinit --help
 ```
 
-### Option 3: Install from Source
+To use `specinit` without activating the venv each time:
+```bash
+# Add alias to your shell profile
+echo 'alias specinit="~/.specinit-venv/bin/specinit"' >> ~/.zshrc  # or ~/.bashrc
+source ~/.zshrc
+```
+
+### Option 3: Install from Cloned Source (For Development)
 
 ```bash
 git clone https://github.com/Geoffe-Ga/specinit.git
 cd specinit
 
-# Create virtual environment first
+# Create virtual environment
 python3 -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 
-# Install in development mode
-pip install -e .
+# Install in editable/development mode
+pip install -e ".[dev]"
+
+# Verify installation
+specinit --help
 ```
 
-> **Note for macOS/Homebrew users**: Modern Python installations (PEP 668) prevent installing packages system-wide to protect your system. Use pipx (Option 1) or a virtual environment (Option 2) instead of `pip install specinit` directly.
+> **Note for macOS/Homebrew users**: Modern Python installations (PEP 668) prevent installing packages system-wide to protect your system. Always use pipx or a virtual environment.
 
 ## Setup
 
@@ -182,15 +193,15 @@ error: externally-managed-environment
 × This environment is externally managed
 ```
 
-**Solution**: Use pipx or a virtual environment instead of `pip install` directly:
+**Solution**: Use pipx or a virtual environment:
 
 ```bash
 # Option A: Use pipx (recommended)
-brew install pipx && pipx install specinit
+brew install pipx && pipx install git+https://github.com/Geoffe-Ga/specinit.git
 
 # Option B: Use a virtual environment
 python3 -m venv ~/.specinit-venv
-~/.specinit-venv/bin/pip install specinit
+~/.specinit-venv/bin/pip install git+https://github.com/Geoffe-Ga/specinit.git
 ~/.specinit-venv/bin/specinit --help
 ```
 
