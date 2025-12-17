@@ -10,19 +10,53 @@ Get from zero to generating projects in under 5 minutes.
 
 ## Installation
 
-### Option 1: Install from PyPI (Recommended)
+### Option 1: Install with pipx (Recommended for macOS/Linux)
+
+[pipx](https://pipx.pypa.io/) installs Python CLI tools in isolated environments, avoiding system Python conflicts.
 
 ```bash
-pip install specinit
+# Install pipx if you don't have it
+brew install pipx  # macOS
+# or: sudo apt install pipx  # Ubuntu/Debian
+# or: pip install --user pipx  # Other systems
+
+pipx ensurepath  # Add pipx to your PATH (restart terminal after)
+
+# Install SpecInit
+pipx install specinit
 ```
 
-### Option 2: Install from Source
+### Option 2: Install in a Virtual Environment
+
+If you see `externally-managed-environment` errors, use a virtual environment:
+
+```bash
+# Create and activate a virtual environment
+python3 -m venv ~/.specinit-venv
+source ~/.specinit-venv/bin/activate  # Windows: ~/.specinit-venv\Scripts\activate
+
+# Install SpecInit
+pip install specinit
+
+# Add to your shell profile for persistence (optional)
+echo 'alias specinit="~/.specinit-venv/bin/specinit"' >> ~/.zshrc  # or ~/.bashrc
+```
+
+### Option 3: Install from Source
 
 ```bash
 git clone https://github.com/Geoffe-Ga/specinit.git
 cd specinit
+
+# Create virtual environment first
+python3 -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+
+# Install in development mode
 pip install -e .
 ```
+
+> **Note for macOS/Homebrew users**: Modern Python installations (PEP 668) prevent installing packages system-wide to protect your system. Use pipx (Option 1) or a virtual environment (Option 2) instead of `pip install specinit` directly.
 
 ## Setup
 
@@ -138,6 +172,27 @@ SpecInit includes 5 built-in templates:
 The template is auto-selected based on your answers, or you can specify one.
 
 ## Troubleshooting
+
+### "externally-managed-environment" error
+
+This error occurs on macOS (Homebrew), Ubuntu 23.04+, and other systems using PEP 668:
+
+```
+error: externally-managed-environment
+× This environment is externally managed
+```
+
+**Solution**: Use pipx or a virtual environment instead of `pip install` directly:
+
+```bash
+# Option A: Use pipx (recommended)
+brew install pipx && pipx install specinit
+
+# Option B: Use a virtual environment
+python3 -m venv ~/.specinit-venv
+~/.specinit-venv/bin/pip install specinit
+~/.specinit-venv/bin/specinit --help
+```
 
 ### "No API key configured"
 Run `specinit init` and enter your Anthropic API key.

@@ -69,8 +69,10 @@ Generating project... ━━━━━━━━━━━━━━━━━━━�
 ## Quick Start
 
 ```bash
-# Install SpecInit
-pip install specinit
+# Install SpecInit (use pipx to avoid system Python conflicts)
+pipx install specinit
+# Or with pip in a virtual environment:
+# python3 -m venv ~/.specinit-venv && ~/.specinit-venv/bin/pip install specinit
 
 # Initialize with your Anthropic API key
 specinit init
@@ -80,6 +82,8 @@ specinit new
 ```
 
 That's it. A browser window opens with a 5-question wizard. Answer the questions, watch the generation progress in real-time, and your project is ready.
+
+> **New to pipx?** Install it with `brew install pipx` (macOS) or `sudo apt install pipx` (Ubuntu). See [QUICKSTART.md](QUICKSTART.md) for detailed installation options.
 
 ---
 
