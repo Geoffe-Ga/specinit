@@ -171,7 +171,7 @@ class GitHubService:
                 "auto_init": auto_init,
             },
         )
-        response.raise_for_status()
+        self._raise_for_status_with_details(response)
         return cast(dict[str, Any], response.json())
 
     def create_issue(
@@ -222,7 +222,7 @@ class GitHubService:
             f"{GITHUB_API_BASE}/repos/{owner}/{repo}/issues",
             params=params,
         )
-        response.raise_for_status()
+        self._raise_for_status_with_details(response)
 
         return [
             Issue(
@@ -243,7 +243,7 @@ class GitHubService:
             f"{GITHUB_API_BASE}/repos/{owner}/{repo}/issues/{issue_number}",
             json={"state": "closed"},
         )
-        response.raise_for_status()
+        self._raise_for_status_with_details(response)
 
     def create_milestone(
         self,
@@ -257,7 +257,7 @@ class GitHubService:
             f"{GITHUB_API_BASE}/repos/{owner}/{repo}/milestones",
             json={"title": title, "description": description},
         )
-        response.raise_for_status()
+        self._raise_for_status_with_details(response)
         result = response.json()["number"]
         assert isinstance(result, int)
         return result
@@ -277,7 +277,7 @@ class GitHubService:
         )
         # Ignore 422 (already exists)
         if response.status_code not in (201, 422):
-            response.raise_for_status()
+            self._raise_for_status_with_details(response)
 
     def create_pull_request(
         self,
@@ -298,7 +298,7 @@ class GitHubService:
                 "base": base,
             },
         )
-        response.raise_for_status()
+        self._raise_for_status_with_details(response)
         result = response.json()
 
         return PullRequest(
@@ -315,7 +315,7 @@ class GitHubService:
     def get_pull_request(self, owner: str, repo: str, pr_number: int) -> PullRequest:
         """Get a pull request."""
         response = self.session.get(f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls/{pr_number}")
-        response.raise_for_status()
+        self._raise_for_status_with_details(response)
         result = response.json()
 
         return PullRequest(
@@ -334,7 +334,7 @@ class GitHubService:
         response = self.session.get(
             f"{GITHUB_API_BASE}/repos/{owner}/{repo}/commits/{ref}/check-runs"
         )
-        response.raise_for_status()
+        self._raise_for_status_with_details(response)
         return cast(dict[str, Any], response.json())
 
     def get_pr_reviews(self, owner: str, repo: str, pr_number: int) -> list[dict[str, Any]]:
@@ -342,7 +342,7 @@ class GitHubService:
         response = self.session.get(
             f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls/{pr_number}/reviews"
         )
-        response.raise_for_status()
+        self._raise_for_status_with_details(response)
         return cast(list[dict[str, Any]], response.json())
 
     def get_pr_comments(self, owner: str, repo: str, pr_number: int) -> list[dict[str, Any]]:
@@ -350,7 +350,7 @@ class GitHubService:
         response = self.session.get(
             f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls/{pr_number}/comments"
         )
-        response.raise_for_status()
+        self._raise_for_status_with_details(response)
         return cast(list[dict[str, Any]], response.json())
 
     def merge_pull_request(
@@ -399,7 +399,7 @@ class GitHubService:
             f"{GITHUB_API_BASE}/repos/{owner}/{repo}/actions/runs",
             params=params,
         )
-        response.raise_for_status()
+        self._raise_for_status_with_details(response)
         data = cast(dict[str, Any], response.json())
         return cast(list[dict[str, Any]], data.get("workflow_runs", []))
 
