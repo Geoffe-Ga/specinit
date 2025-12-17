@@ -172,6 +172,7 @@ class GitHubService:
             },
         )
         self._raise_for_status_with_details(response)
+        self._validate_json_response(response)
         return cast(dict[str, Any], response.json())
 
     def create_issue(
@@ -195,6 +196,7 @@ class GitHubService:
             json=data,
         )
         self._raise_for_status_with_details(response)
+        self._validate_json_response(response)
         result = response.json()
 
         return Issue(
@@ -223,6 +225,7 @@ class GitHubService:
             params=params,
         )
         self._raise_for_status_with_details(response)
+        self._validate_json_response(response)
 
         return [
             Issue(
@@ -258,6 +261,7 @@ class GitHubService:
             json={"title": title, "description": description},
         )
         self._raise_for_status_with_details(response)
+        self._validate_json_response(response)
         result = response.json()["number"]
         assert isinstance(result, int)
         return result
@@ -299,6 +303,7 @@ class GitHubService:
             },
         )
         self._raise_for_status_with_details(response)
+        self._validate_json_response(response)
         result = response.json()
 
         return PullRequest(
@@ -316,6 +321,7 @@ class GitHubService:
         """Get a pull request."""
         response = self.session.get(f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls/{pr_number}")
         self._raise_for_status_with_details(response)
+        self._validate_json_response(response)
         result = response.json()
 
         return PullRequest(
@@ -335,6 +341,7 @@ class GitHubService:
             f"{GITHUB_API_BASE}/repos/{owner}/{repo}/commits/{ref}/check-runs"
         )
         self._raise_for_status_with_details(response)
+        self._validate_json_response(response)
         return cast(dict[str, Any], response.json())
 
     def get_pr_reviews(self, owner: str, repo: str, pr_number: int) -> list[dict[str, Any]]:
@@ -343,6 +350,7 @@ class GitHubService:
             f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls/{pr_number}/reviews"
         )
         self._raise_for_status_with_details(response)
+        self._validate_json_response(response)
         return cast(list[dict[str, Any]], response.json())
 
     def get_pr_comments(self, owner: str, repo: str, pr_number: int) -> list[dict[str, Any]]:
@@ -351,6 +359,7 @@ class GitHubService:
             f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls/{pr_number}/comments"
         )
         self._raise_for_status_with_details(response)
+        self._validate_json_response(response)
         return cast(list[dict[str, Any]], response.json())
 
     def merge_pull_request(
@@ -400,6 +409,7 @@ class GitHubService:
             params=params,
         )
         self._raise_for_status_with_details(response)
+        self._validate_json_response(response)
         data = cast(dict[str, Any], response.json())
         return cast(list[dict[str, Any]], data.get("workflow_runs", []))
 
