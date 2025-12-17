@@ -389,7 +389,12 @@ class GitHubService:
         if response.status_code == 200:
             return True
         elif response.status_code == 405:
-            message = response.json().get("message", "Unknown reason")
+            # Try to get error message from JSON response, fall back to generic message
+            try:
+                self._validate_json_response(response)
+                message = response.json().get("message", "Unknown reason")
+            except ValueError:
+                message = "Unknown reason (non-JSON response)"
             raise ValueError(f"PR cannot be merged: {message}")
         elif response.status_code == 409:
             raise ValueError("PR has merge conflicts that must be resolved first")

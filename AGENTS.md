@@ -61,6 +61,27 @@ pytest tests/unit/test_cli.py
 cd tests/unit && pytest test_cli.py
 ```
 
+### 4. Efficient CI Monitoring
+
+Do not use blocking `--watch` commands for CI checks. These waste resources and context.
+
+```bash
+# WRONG - Blocks indefinitely, wastes context
+gh pr checks 21 --watch
+
+# CORRECT - Check once without blocking
+gh pr checks 21
+
+# CORRECT - Check status and move on
+gh pr view 21 --json statusCheckRollup
+```
+
+**CI monitoring guidelines:**
+- Check CI status once after pushing, then proceed with other work
+- If CI is still pending, check back after completing another task
+- Never poll CI status repeatedly in a loop
+- Trust that CI will complete; check the PR comments for review feedback
+
 ## Project Structure
 
 ```
