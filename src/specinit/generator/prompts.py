@@ -29,6 +29,14 @@ All planning and specification documents should be saved in the /plan/ directory
         platforms = context["platforms"]
         tech_stack = context["tech_stack"]
         aesthetics = context["aesthetics"]
+        additional_context = context.get("additional_context")
+
+        additional_context_section = ""
+        if additional_context:
+            additional_context_section = f"""
+
+## Additional Context
+{additional_context}"""
 
         return f"""{self.BASE_SYSTEM}
 
@@ -54,7 +62,7 @@ As {user_story["role"]}, I want to {user_story["action"]}, so that {user_story["
 - Tools: {", ".join(tech_stack.get("tools", ["N/A"]))}
 
 ## UX Aesthetics
-{", ".join(aesthetics)}
+{", ".join(aesthetics)}{additional_context_section}
 
 # Your Task
 Generate a comprehensive product specification document in Markdown format.
@@ -296,6 +304,15 @@ Output ONLY the file contents in this format, no additional commentary."""
 
     def build_demo_code_prompt(self, context: dict[str, Any], spec_content: str) -> str:
         """Build prompt for Step 8: Demo Code."""
+        additional_context = context.get("additional_context")
+
+        additional_context_section = ""
+        if additional_context:
+            additional_context_section = f"""
+
+## Additional Context
+{additional_context}"""
+
         return f"""{self.BASE_SYSTEM}
 
 # Context
@@ -303,7 +320,7 @@ Project: {context["project_name"]}
 Features: {", ".join(context["features"])}
 
 ## Product Specification
-{spec_content[:8000]}  # Truncate if too long
+{spec_content[:8000]}  # Truncate if too long{additional_context_section}
 
 # Your Task
 Generate working demo code that demonstrates the core features.

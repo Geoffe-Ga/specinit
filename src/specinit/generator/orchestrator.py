@@ -56,6 +56,7 @@ class GenerationOrchestrator:
         features: list[str],
         tech_stack: dict[str, list[str]],
         aesthetics: list[str],
+        additional_context: str | None = None,
         progress_callback: ProgressCallback | None = None,
     ) -> dict[str, Any]:
         """Run the full generation process."""
@@ -75,6 +76,7 @@ class GenerationOrchestrator:
             "features": features,
             "tech_stack": tech_stack,
             "aesthetics": aesthetics,
+            "additional_context": additional_context,
             "template": template,
         }
 

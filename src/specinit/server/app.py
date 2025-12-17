@@ -76,6 +76,7 @@ class ProjectConfig(BaseModel):
     tech_stack: dict[str, list[str]]  # frontend, backend, database, tools
     aesthetics: list[str]
     github: GitHubConfigModel | None = None
+    additional_context: str | None = None
 
 
 class GitHubTokenRequest(BaseModel):
@@ -234,6 +235,7 @@ async def generate_project(websocket: WebSocket) -> None:
             features=project_config.features,
             tech_stack=project_config.tech_stack,
             aesthetics=project_config.aesthetics,
+            additional_context=project_config.additional_context,
             progress_callback=send_progress,
         )
 
