@@ -18,7 +18,16 @@ const projectSchema = z.object({
     action: z.string().min(3, 'Action must be at least 3 characters'),
     outcome: z.string().min(3, 'Outcome must be at least 3 characters'),
   }),
-  features: z.array(z.string()).min(1, 'Add at least one feature').max(10),
+  features: z
+    .array(
+      z
+        .string()
+        .trim()
+        .min(1, 'Feature cannot be empty')
+        .max(2000, 'Feature description must be less than 2000 characters')
+    )
+    .min(1, 'Add at least one feature')
+    .max(20, 'Maximum 20 features allowed'),
   techStack: z.object({
     frontend: z.array(z.string()),
     backend: z.array(z.string()),
@@ -61,7 +70,7 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
       name: '',
       platforms: [],
       userStory: { role: '', action: '', outcome: '' },
-      features: [],
+      features: [''],
       techStack: { frontend: [], backend: [], database: [], tools: [] },
       aesthetics: [],
       github: {
@@ -161,7 +170,7 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-xl font-semibold mb-4">Features</h2>
           <p className="text-gray-600 mb-4">
-            Add up to 10 features for your project.
+            Add up to 20 features for your project.
           </p>
 
           <FeatureList

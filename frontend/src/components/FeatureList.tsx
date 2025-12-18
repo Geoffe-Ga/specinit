@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { X, Plus } from 'lucide-react'
 
 interface FeatureListProps {
@@ -7,111 +6,81 @@ interface FeatureListProps {
   error?: string
 }
 
-const SUGGESTIONS = [
-  'User authentication',
-  'Dark mode',
-  'Offline support',
-  'Push notifications',
-  'Search functionality',
-  'User profiles',
-  'Data export',
-  'Admin dashboard',
-]
+const MAX_FEATURES = 20
+const MAX_FEATURE_LENGTH = 2000 // characters
 
 export function FeatureList({ features, onChange, error }: FeatureListProps) {
-  const [newFeature, setNewFeature] = useState('')
-
   const addFeature = () => {
-    if (newFeature.trim() && features.length < 10) {
-      onChange([...features, newFeature.trim()])
-      setNewFeature('')
+    if (features.length < MAX_FEATURES) {
+      onChange([...features, ''])
     }
   }
 
   const removeFeature = (index: number) => {
-    onChange(features.filter((_, i) => i !== index))
-  }
-
-  const addSuggestion = (suggestion: string) => {
-    if (!features.includes(suggestion) && features.length < 10) {
-      onChange([...features, suggestion])
+    // Don't allow removing the last feature if there's only one
+    if (features.length > 1) {
+      onChange(features.filter((_, i) => i !== index))
     }
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      addFeature()
-    }
+  const updateFeature = (index: number, value: string) => {
+    const newFeatures = [...features]
+    newFeatures[index] = value
+    onChange(newFeatures)
   }
-
-  const availableSuggestions = SUGGESTIONS.filter((s) => !features.includes(s))
 
   return (
-    <div>
-      {/* Feature input */}
-      <div className="flex gap-2 mb-4">
-        <input
-          type="text"
-          value={newFeature}
-          onChange={(e) => setNewFeature(e.target.value)}
-          onKeyDown={handleKeyDown}
-          className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          placeholder="Add a feature..."
-          disabled={features.length >= 10}
-        />
-        <button
-          type="button"
-          onClick={addFeature}
-          disabled={!newFeature.trim() || features.length >= 10}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Plus className="w-5 h-5" />
-        </button>
-      </div>
-
-      {/* Feature list */}
-      {features.length > 0 && (
-        <ul className="space-y-2 mb-4">
-          {features.map((feature, index) => (
-            <li
-              key={index}
-              className="flex items-center justify-between px-4 py-2 bg-gray-50 rounded-md"
+    <div className="space-y-4">
+      {/* Feature fields */}
+      {features.map((feature, index) => {
+        const wordCount = feature.trim() ? feature.trim().split(/\s+/).filter(w => w).length : 0
+        return (
+          <div key={index} className="relative">
+            <div className="flex items-start gap-2">
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Feature {index + 1}
+                </label>
+                <textarea
+                  value={feature}
+                  onChange={(e) => updateFeature(index, e.target.value)}
+                  maxLength={MAX_FEATURE_LENGTH}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y min-h-[80px]"
+                  placeholder="Describe this feature (1-2 words for simple features, or write detailed requirements)..."
+                />
+                <div className="mt-1 flex items-center justify-between text-xs text-gray-500">
+                  <span>{feature.length} / {MAX_FEATURE_LENGTH} characters</span>
+                  <span>{wordCount} word{wordCount !== 1 ? 's' : ''}</span>
+                </div>
+              </div>
+            <button
+              type="button"
+              onClick={() => removeFeature(index)}
+              disabled={features.length === 1}
+              className="mt-7 p-2 text-gray-400 hover:text-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              title={features.length === 1 ? "Cannot remove the last feature" : "Remove feature"}
+              aria-label={features.length === 1 ? "Cannot remove the last feature" : `Remove feature ${index + 1}`}
             >
-              <span>{feature}</span>
-              <button
-                type="button"
-                onClick={() => removeFeature(index)}
-                className="text-gray-400 hover:text-red-500"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {/* Suggestions */}
-      {availableSuggestions.length > 0 && features.length < 10 && (
-        <div>
-          <p className="text-sm text-gray-600 mb-2">Suggestions:</p>
-          <div className="flex flex-wrap gap-2">
-            {availableSuggestions.slice(0, 4).map((suggestion) => (
-              <button
-                key={suggestion}
-                type="button"
-                onClick={() => addSuggestion(suggestion)}
-                className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200"
-              >
-                + {suggestion}
-              </button>
-            ))}
+              <X className="w-5 h-5" aria-hidden="true" />
+            </button>
           </div>
         </div>
-      )}
+        )
+      })}
+
+      {/* Add feature button */}
+      <button
+        type="button"
+        onClick={addFeature}
+        disabled={features.length >= MAX_FEATURES}
+        className="flex items-center gap-2 px-4 py-2 text-blue-600 border border-blue-600 rounded-md hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed"
+        aria-label={`Add feature (${features.length} of ${MAX_FEATURES} features used)`}
+      >
+        <Plus className="w-5 h-5" aria-hidden="true" />
+        Add Feature ({features.length}/{MAX_FEATURES})
+      </button>
 
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-      <p className="mt-2 text-sm text-gray-500">{features.length}/10 features</p>
     </div>
   )
 }

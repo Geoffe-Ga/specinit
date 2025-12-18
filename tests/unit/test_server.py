@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from specinit.server.app import (
     ProjectConfig,
@@ -341,6 +342,102 @@ class TestContextVariables:
 
         result = get_shutdown_event()
         assert result is event
+
+
+class TestFeatureValidation:
+    """Tests for feature validation in ProjectConfig (Issue #24)."""
+
+    def test_valid_features_accepted(self):
+        """ProjectConfig should accept valid features."""
+        config = ProjectConfig(
+            name="test",
+            platforms=["web"],
+            user_story={"role": "user", "action": "test", "outcome": "works"},
+            features=["Feature 1", "Feature 2"],
+            tech_stack={"frontend": [], "backend": [], "database": [], "tools": []},
+            aesthetics=[],
+        )
+        assert len(config.features) == 2
+
+    def test_rejects_empty_feature_string(self):
+        """ProjectConfig should reject empty feature strings."""
+        with pytest.raises(ValidationError) as exc_info:
+            ProjectConfig(
+                name="test",
+                platforms=["web"],
+                user_story={"role": "user", "action": "test", "outcome": "works"},
+                features=["Feature 1", ""],
+                tech_stack={"frontend": [], "backend": [], "database": [], "tools": []},
+                aesthetics=[],
+            )
+        assert "cannot be empty" in str(exc_info.value).lower()
+
+    def test_rejects_whitespace_only_feature(self):
+        """ProjectConfig should reject features with only whitespace."""
+        with pytest.raises(ValidationError) as exc_info:
+            ProjectConfig(
+                name="test",
+                platforms=["web"],
+                user_story={"role": "user", "action": "test", "outcome": "works"},
+                features=["Feature 1", "   "],
+                tech_stack={"frontend": [], "backend": [], "database": [], "tools": []},
+                aesthetics=[],
+            )
+        assert "cannot be empty" in str(exc_info.value).lower()
+
+    def test_rejects_more_than_20_features(self):
+        """ProjectConfig should reject more than 20 features."""
+        with pytest.raises(ValidationError) as exc_info:
+            ProjectConfig(
+                name="test",
+                platforms=["web"],
+                user_story={"role": "user", "action": "test", "outcome": "works"},
+                features=[f"Feature {i}" for i in range(21)],
+                tech_stack={"frontend": [], "backend": [], "database": [], "tools": []},
+                aesthetics=[],
+            )
+        assert "maximum 20 features" in str(exc_info.value).lower()
+
+    def test_rejects_feature_exceeding_2000_chars(self):
+        """ProjectConfig should reject features exceeding 2000 characters."""
+        long_feature = "a" * 2001
+
+        with pytest.raises(ValidationError) as exc_info:
+            ProjectConfig(
+                name="test",
+                platforms=["web"],
+                user_story={"role": "user", "action": "test", "outcome": "works"},
+                features=["Feature 1", long_feature],
+                tech_stack={"frontend": [], "backend": [], "database": [], "tools": []},
+                aesthetics=[],
+            )
+        assert "2000 character limit" in str(exc_info.value).lower()
+
+    def test_accepts_exactly_20_features(self):
+        """ProjectConfig should accept exactly 20 features."""
+        config = ProjectConfig(
+            name="test",
+            platforms=["web"],
+            user_story={"role": "user", "action": "test", "outcome": "works"},
+            features=[f"Feature {i}" for i in range(20)],
+            tech_stack={"frontend": [], "backend": [], "database": [], "tools": []},
+            aesthetics=[],
+        )
+        assert len(config.features) == 20
+
+    def test_accepts_feature_exactly_2000_chars(self):
+        """ProjectConfig should accept features at exactly 2000 characters."""
+        max_length_feature = "a" * 2000
+
+        config = ProjectConfig(
+            name="test",
+            platforms=["web"],
+            user_story={"role": "user", "action": "test", "outcome": "works"},
+            features=["Feature 1", max_length_feature],
+            tech_stack={"frontend": [], "backend": [], "database": [], "tools": []},
+            aesthetics=[],
+        )
+        assert len(config.features[1]) == 2000
 
 
 class TestAdditionalContext:

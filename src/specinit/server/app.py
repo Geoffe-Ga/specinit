@@ -11,7 +11,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from specinit.generator.orchestrator import GenerationOrchestrator
 from specinit.github.service import GitHubService
@@ -77,6 +77,23 @@ class ProjectConfig(BaseModel):
     aesthetics: list[str]
     github: GitHubConfigModel | None = None
     additional_context: str | None = Field(None, max_length=10000)
+
+    @field_validator("features")
+    @classmethod
+    def validate_features(cls, v: list[str]) -> list[str]:
+        """Validate features list constraints."""
+        if not v:
+            raise ValueError("At least one feature is required")
+        if len(v) > 20:
+            raise ValueError("Maximum 20 features allowed")
+
+        for i, feature in enumerate(v):
+            if len(feature) > 2000:
+                raise ValueError(f"Feature {i + 1} exceeds 2000 character limit")
+            if not feature.strip():
+                raise ValueError(f"Feature {i + 1} cannot be empty")
+
+        return v
 
 
 class GitHubTokenRequest(BaseModel):
