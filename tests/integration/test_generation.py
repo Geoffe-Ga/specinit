@@ -229,3 +229,230 @@ class TestGenerationOrchestrator:
             assert "product_spec" in steps
             assert "structure" in steps
             assert "git_init" in steps
+
+    @pytest.mark.asyncio
+    async def test_github_integration_disabled_when_not_configured(
+        self,
+        temp_dir: Path,
+        mock_claude_response: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """GitHub integration should not run when not configured."""
+        monkeypatch.setenv("HOME", str(temp_dir))
+        configure_git_in_temp_home(temp_dir)
+
+        with (
+            patch("specinit.generator.orchestrator.Anthropic") as mock_anthropic,
+            patch("specinit.generator.orchestrator.ConfigManager") as mock_config,
+            patch("specinit.generator.orchestrator.HistoryManager") as mock_history,
+            patch("specinit.generator.orchestrator.GitHubService") as mock_gh,
+        ):
+            mock_client = MagicMock()
+            mock_client.messages.create.return_value = mock_claude_response
+            mock_anthropic.return_value = mock_client
+
+            mock_config_instance = MagicMock()
+            mock_config_instance.get_api_key.return_value = "sk-ant-test"
+            mock_config_instance.get.return_value = "claude-sonnet-4-5-20250929"
+            mock_config.return_value = mock_config_instance
+
+            mock_history_instance = MagicMock()
+            mock_history_instance.add_project.return_value = 1
+            mock_history.return_value = mock_history_instance
+
+            project_dir = temp_dir / "output"
+            project_dir.mkdir()
+
+            orchestrator = GenerationOrchestrator(
+                output_dir=project_dir,
+                project_name="test-project",
+            )
+
+            # Run without GitHub config
+            await orchestrator.generate(
+                platforms=["web"],
+                user_story={"role": "dev", "action": "test", "outcome": "verify"},
+                features=["Feature"],
+                tech_stack={"frontend": [], "backend": [], "database": [], "tools": []},
+                aesthetics=[],
+                github_config=None,  # No GitHub config
+            )
+
+            # GitHub service should NOT be called
+            mock_gh.get_token.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_github_integration_creates_repo_and_issues(
+        self,
+        temp_dir: Path,
+        mock_claude_response: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """GitHub integration should create repo, push commit, and create issues."""
+        monkeypatch.setenv("HOME", str(temp_dir))
+        configure_git_in_temp_home(temp_dir)
+
+        with (
+            patch("specinit.generator.orchestrator.Anthropic") as mock_anthropic,
+            patch("specinit.generator.orchestrator.ConfigManager") as mock_config,
+            patch("specinit.generator.orchestrator.HistoryManager") as mock_history,
+            patch("specinit.generator.orchestrator.GitHubService") as mock_gh_class,
+            patch("specinit.generator.orchestrator.subprocess") as mock_subprocess,
+        ):
+            mock_client = MagicMock()
+            mock_client.messages.create.return_value = mock_claude_response
+            mock_anthropic.return_value = mock_client
+
+            mock_config_instance = MagicMock()
+            mock_config_instance.get_api_key.return_value = "sk-ant-test"
+            mock_config_instance.get.return_value = "claude-sonnet-4-5-20250929"
+            mock_config.return_value = mock_config_instance
+
+            mock_history_instance = MagicMock()
+            mock_history_instance.add_project.return_value = 1
+            mock_history.return_value = mock_history_instance
+
+            # Mock GitHub service
+            mock_gh_class.get_token.return_value = "ghp_test_token"
+            mock_gh = MagicMock()
+            mock_gh.parse_repo_url.return_value = ("testowner", "testrepo")
+            mock_gh.repo_exists.return_value = False
+            mock_gh_class.return_value = mock_gh
+
+            # Mock subprocess for git operations
+            # Need to handle both git init (step 7) and GitHub push operations
+            def subprocess_side_effect(*args, **kwargs):
+                cmd = args[0] if args else kwargs.get("args", [])
+                result = MagicMock()
+
+                if cmd[0:2] == ["git", "init"]:
+                    result.returncode = 0
+                    result.stderr = b""
+                elif cmd[0:2] == ["git", "add"]:
+                    result.returncode = 0
+                    result.stderr = b""
+                elif cmd[0:2] == ["git", "commit"]:
+                    result.returncode = 0
+                    result.stderr = b""
+                elif cmd[0:3] == ["git", "remote", "get-url"]:
+                    result.returncode = 1  # remote doesn't exist
+                    result.stderr = b""
+                elif cmd[0:3] == ["git", "remote", "add"]:
+                    result.returncode = 0
+                    result.stderr = b""
+                elif cmd[0:2] == ["git", "push"]:
+                    result.returncode = 0
+                    result.stderr = b""
+                else:
+                    result.returncode = 0
+                    result.stderr = b""
+                return result
+
+            mock_subprocess.run.side_effect = subprocess_side_effect
+
+            project_dir = temp_dir / "output"
+            project_dir.mkdir()
+
+            orchestrator = GenerationOrchestrator(
+                output_dir=project_dir,
+                project_name="test-project",
+            )
+
+            # Track progress calls
+            progress_calls: list[tuple[str, str]] = []
+
+            async def track_progress(
+                step: str, status: str, _details: dict[str, Any] | None
+            ) -> None:
+                progress_calls.append((step, status))
+
+            # Run with GitHub config
+            await orchestrator.generate(
+                platforms=["web"],
+                user_story={"role": "dev", "action": "test", "outcome": "verify"},
+                features=["Feature 1", "Feature 2"],
+                tech_stack={"frontend": [], "backend": [], "database": [], "tools": []},
+                aesthetics=[],
+                github_config={
+                    "enabled": True,
+                    "repo_url": "https://github.com/testowner/testrepo",
+                    "create_repo": True,
+                    "yolo_mode": False,
+                },
+                progress_callback=track_progress,
+            )
+
+            # GitHub service should be called
+            mock_gh_class.get_token.assert_called_once()
+            mock_gh.parse_repo_url.assert_called_once_with("https://github.com/testowner/testrepo")
+            mock_gh.repo_exists.assert_called_once_with("testowner", "testrepo")
+            mock_gh.create_repo.assert_called_once()
+
+            # Issues should be created for each feature
+            assert mock_gh.create_issue.call_count == 2
+
+            # Progress should include github_setup
+            steps = [call[0] for call in progress_calls]
+            assert "github_setup" in steps
+
+    @pytest.mark.asyncio
+    async def test_github_integration_handles_errors_gracefully(
+        self,
+        temp_dir: Path,
+        mock_claude_response: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """GitHub integration errors should not fail the entire generation."""
+        monkeypatch.setenv("HOME", str(temp_dir))
+        configure_git_in_temp_home(temp_dir)
+
+        with (
+            patch("specinit.generator.orchestrator.Anthropic") as mock_anthropic,
+            patch("specinit.generator.orchestrator.ConfigManager") as mock_config,
+            patch("specinit.generator.orchestrator.HistoryManager") as mock_history,
+            patch("specinit.generator.orchestrator.GitHubService") as mock_gh_class,
+        ):
+            mock_client = MagicMock()
+            mock_client.messages.create.return_value = mock_claude_response
+            mock_anthropic.return_value = mock_client
+
+            mock_config_instance = MagicMock()
+            mock_config_instance.get_api_key.return_value = "sk-ant-test"
+            mock_config_instance.get.return_value = "claude-sonnet-4-5-20250929"
+            mock_config.return_value = mock_config_instance
+
+            mock_history_instance = MagicMock()
+            mock_history_instance.add_project.return_value = 1
+            mock_history.return_value = mock_history_instance
+
+            # Mock GitHub service to raise an error
+            mock_gh_class.get_token.return_value = "ghp_test_token"
+            mock_gh = MagicMock()
+            mock_gh.parse_repo_url.side_effect = ValueError("Invalid repo URL")
+            mock_gh_class.return_value = mock_gh
+
+            project_dir = temp_dir / "output"
+            project_dir.mkdir()
+
+            orchestrator = GenerationOrchestrator(
+                output_dir=project_dir,
+                project_name="test-project",
+            )
+
+            # Run with GitHub config that will fail
+            result = await orchestrator.generate(
+                platforms=["web"],
+                user_story={"role": "dev", "action": "test", "outcome": "verify"},
+                features=["Feature"],
+                tech_stack={"frontend": [], "backend": [], "database": [], "tools": []},
+                aesthetics=[],
+                github_config={
+                    "enabled": True,
+                    "repo_url": "invalid-url",
+                    "create_repo": True,
+                },
+            )
+
+            # Generation should still succeed despite GitHub error
+            assert "path" in result
+            assert "total_cost" in result
