@@ -313,7 +313,7 @@ Generated with SpecInit
         )
 
     async def _generate_demo_code(self, context: dict[str, Any]) -> None:
-        """Step 8: Generate demo implementation code."""
+        """Step 8: Generate demo implementation code and README."""
         # Read the product spec for context
         spec_path = self.project_path / "plan" / "product-spec.md"
         spec_content = spec_path.read_text() if spec_path.exists() else ""
@@ -324,7 +324,42 @@ Generated with SpecInit
         # Parse and write demo code files
         self.file_writer.write_demo_code(demo_code)
 
+        # Now generate README based on actual implementation
+        await self._generate_readme(context, spec_content)
+
         self.file_writer.append(
             "plan/progress-notes.md",
-            "\n## Step 8: Demo Code\n- Demo implementation generated\n- Tests included\n",
+            "\n## Step 8: Demo Code\n- Demo implementation generated\n- Tests included\n- README.md generated based on actual implementation\n",
         )
+
+    async def _generate_readme(self, context: dict[str, Any], spec_content: str) -> None:
+        """Generate README.md based on actual project implementation.
+
+        This is called AFTER demo code is generated so the README can
+        accurately reflect what was actually built.
+        """
+        # Collect list of generated files for context
+        project_files: list[str] = []
+        for path in self.project_path.rglob("*"):
+            if path.is_file():
+                try:
+                    rel_path = path.relative_to(self.project_path)
+                    # Skip common build/cache directories
+                    if not any(
+                        part.startswith(".")
+                        or part in {"__pycache__", "node_modules", "dist", "build"}
+                        for part in rel_path.parts
+                    ):
+                        project_files.append(str(rel_path))
+                except ValueError:
+                    continue
+
+        # Sort for consistent ordering
+        project_files.sort()
+
+        # Build and call the README generation prompt
+        prompt = self.prompt_builder.build_readme_prompt(context, spec_content, project_files)
+        readme_content = await self._call_claude(prompt, "readme")
+
+        # Write README to docs/ directory
+        self.file_writer.write("docs/README.md", readme_content)

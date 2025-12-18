@@ -125,7 +125,10 @@ Output ONLY a bash script, starting with #!/bin/bash
 No markdown code blocks, just the raw script."""
 
     def build_documentation_prompt(self, context: dict[str, Any]) -> str:
-        """Build prompt for Step 3: Documentation."""
+        """Build prompt for Step 3: Documentation (CONTRIBUTING and CLAUDE only).
+
+        Note: README.md is generated later (after demo code) to reflect actual implementation.
+        """
         user_story = context["user_story"]
 
         return f"""{self.BASE_SYSTEM}
@@ -136,17 +139,12 @@ User Story: As {user_story["role"]}, I want to {user_story["action"]}, so that {
 Features: {", ".join(context["features"])}
 
 # Your Task
-Generate comprehensive documentation files.
+Generate documentation files for development workflow.
+
+NOTE: Do NOT generate README.md yet - it will be created later after the implementation is complete,
+so it can accurately reflect the actual project code.
 
 ## Required Files
-
-### docs/README.md
-- Project overview and value proposition
-- Quick start guide (install, configure, run)
-- Feature list with brief descriptions
-- Architecture overview (high-level)
-- Contributing section
-- License info
 
 ### docs/CONTRIBUTING.md
 - Development setup instructions
@@ -185,16 +183,14 @@ After the Critical Rules section, also include:
 # Output Format
 Output the files in this format:
 
---- FILE: docs/README.md ---
-(content)
-
 --- FILE: docs/CONTRIBUTING.md ---
 (content)
 
 --- FILE: docs/CLAUDE.md ---
 (content)
 
-Output ONLY the file contents in this format, no additional commentary."""
+Output ONLY the file contents in this format, no additional commentary.
+Do NOT include README.md - it will be generated later."""
 
     def build_tooling_prompt(self, context: dict[str, Any]) -> str:
         """Build prompt for Step 4: Developer Tooling."""
@@ -352,3 +348,130 @@ Output the files in this format:
 
 Output ONLY the file contents in this format, no additional commentary.
 Each file should be complete and functional."""
+
+    def build_readme_prompt(
+        self, context: dict[str, Any], spec_content: str, project_files: list[str]
+    ) -> str:
+        """Build prompt for README generation (after demo code is complete).
+
+        This generates a README that reflects the actual implementation,
+        not just a generic template.
+        """
+        user_story = context["user_story"]
+        additional_context = context.get("additional_context")
+
+        additional_context_section = ""
+        if additional_context:
+            additional_context_section = f"""
+
+## Additional Context
+{additional_context}"""
+
+        files_summary = "\n".join(f"- {f}" for f in project_files[:50])  # Limit to first 50
+
+        return f"""{self.BASE_SYSTEM}
+
+# Context
+Project: {context["project_name"]}
+User Story: As {user_story["role"]}, I want to {user_story["action"]}, so that {user_story["outcome"]}
+Features: {", ".join(context["features"])}
+Platforms: {", ".join(context["platforms"])}
+
+## Tech Stack
+- Frontend: {", ".join(context["tech_stack"].get("frontend", ["N/A"]))}
+- Backend: {", ".join(context["tech_stack"].get("backend", ["N/A"]))}
+- Database: {", ".join(context["tech_stack"].get("database", ["N/A"]))}
+- Tools: {", ".join(context["tech_stack"].get("tools", ["N/A"]))}{additional_context_section}
+
+## Product Specification (Excerpt)
+{spec_content[:4000]}  # Truncate to stay within token limits
+
+## Generated Project Structure
+{files_summary}
+
+# Your Task
+Generate a comprehensive README.md that accurately documents THIS SPECIFIC PROJECT.
+
+CRITICAL: This README must reflect the ACTUAL implementation, not a generic template.
+You must base the documentation on:
+1. The user story and features provided
+2. The product specification above
+3. The actual project structure and files listed
+4. The tech stack selected
+
+## Required Sections
+
+### Project Title and Description
+- Use the project name: {context["project_name"]}
+- Write a compelling description based on the user story
+- Explain the value proposition clearly
+
+### Features
+- List the ACTUAL features implemented (from the features list)
+- Provide brief descriptions of what each feature does
+- Include screenshots placeholders if relevant for the platform
+
+### Tech Stack
+- Document the actual technologies used
+- Explain why they were chosen (based on requirements)
+- Include version information where relevant
+
+### Getting Started
+
+#### Prerequisites
+- List required software/tools for THIS specific tech stack
+- Include version requirements
+
+#### Installation
+- Provide exact commands for THIS project structure
+- Include platform-specific instructions if needed (iOS/Android/Web)
+
+#### Configuration
+- Document any required environment variables
+- Explain configuration files that were generated
+
+#### Running the Application
+- Provide commands to run in development mode
+- Include commands for different platforms if applicable
+- Document how to access the application (URL, ports, etc.)
+
+### Project Structure
+- Explain the directory layout that was ACTUALLY created
+- Describe the purpose of key directories and files
+- Make it specific to THIS project, not generic
+
+### Development
+
+#### Running Tests
+- Show how to run the test suite that was generated
+- Explain the testing approach used
+
+#### Linting and Formatting
+- Document the linters/formatters configured
+- Show commands to run them
+
+#### Pre-commit Hooks
+- Explain that pre-commit hooks are configured
+- Show how to install and use them
+
+### API Documentation (if applicable)
+- If this is a backend/API project, document the endpoints
+- Include example requests/responses
+- Reference the OpenAPI/Swagger docs if generated
+
+### Deployment (if applicable)
+- Provide deployment instructions for the chosen platform
+- Include CI/CD information if configured
+
+### Contributing
+- Reference the CONTRIBUTING.md file
+- Encourage contributions
+
+### License
+- Specify the license (MIT recommended)
+
+# Output Format
+Output ONLY the README.md content in markdown format.
+Start with the project title as an H1 heading.
+Do NOT include "--- FILE: ---" markers.
+Do NOT add extra commentary."""
