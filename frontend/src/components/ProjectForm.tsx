@@ -19,7 +19,12 @@ const projectSchema = z.object({
     outcome: z.string().min(3, 'Outcome must be at least 3 characters'),
   }),
   features: z
-    .array(z.string().max(2000, 'Feature description must be less than 2000 characters'))
+    .array(
+      z
+        .string()
+        .min(1, 'Feature cannot be empty')
+        .max(2000, 'Feature description must be less than 2000 characters')
+    )
     .min(1, 'Add at least one feature')
     .max(20, 'Maximum 20 features allowed'),
   techStack: z.object({

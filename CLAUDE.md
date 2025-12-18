@@ -187,9 +187,8 @@ source .venv/bin/activate && pytest tests/unit/test_cli.py -v -s
 # Or via pre-commit
 pre-commit run --all-files
 
-# Auto-fix issues (use with caution)
-source .venv/bin/activate && ruff check --fix src tests
-source .venv/bin/activate && ruff format src tests
+# Auto-fix issues (RECOMMENDED)
+./scripts/format.sh
 ```
 
 ### Adding a New Feature
