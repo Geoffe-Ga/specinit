@@ -270,6 +270,22 @@ select = [
 - ESLint with security plugin (eslint-plugin-security)
 - TypeScript strict mode enabled
 - Prettier for formatting
+- CRITICAL: Use React 18 compatible versions in package.json:
+  - react: 18.3.1 (latest React 18.x, compatible with Expo/RN)
+  - react-dom: 18.3.1 (if using React for web)
+  - @types/react: ^18.3.0 (for TypeScript projects)
+  - @types/react-dom: ^18.3.0 (for TypeScript web projects)
+  - react-test-renderer: 18.3.1 (for testing with React Native/Expo)
+  - Avoid React 19+ as Expo/React Native don't fully support it yet
+
+### For Expo/React Native projects:
+- CRITICAL: Use Expo SDK 52 compatible versions:
+  - expo: ~52.0.0
+  - react-native: 0.76.5 (exact version required by Expo 52)
+  - react: 18.3.1 (required by Expo 52)
+  - expo-router: ~4.0.0 (if using file-based routing)
+  - Use `npx expo install <package>` to ensure version compatibility
+  - Avoid manually specifying versions that conflict with Expo SDK
 
 ### .pre-commit-config.yaml
 - Use LOCAL hooks (not external repos) to ensure same versions as CI

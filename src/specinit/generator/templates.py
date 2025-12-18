@@ -39,6 +39,13 @@ TEMPLATES = {
             "database": ["supabase"],
             "tools": ["jest", "eslint", "prettier"],
         },
+        "version_constraints": {
+            "expo": "~52.0.0",
+            "react-native": "0.76.5",
+            "react": "18.3.1",
+            "react-dom": "18.3.1",
+            "expo-router": "~4.0.0",
+        },
         "directory_structure": [
             "src/",
             "src/components/",
