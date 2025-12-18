@@ -324,28 +324,10 @@ class TestGenerationOrchestrator:
             def subprocess_side_effect(*args, **kwargs):
                 cmd = args[0] if args else kwargs.get("args", [])
                 result = MagicMock()
+                result.stderr = b""
 
-                if cmd[0:2] == ["git", "init"]:
-                    result.returncode = 0
-                    result.stderr = b""
-                elif cmd[0:2] == ["git", "add"]:
-                    result.returncode = 0
-                    result.stderr = b""
-                elif cmd[0:2] == ["git", "commit"]:
-                    result.returncode = 0
-                    result.stderr = b""
-                elif cmd[0:3] == ["git", "remote", "get-url"]:
-                    result.returncode = 1  # remote doesn't exist
-                    result.stderr = b""
-                elif cmd[0:3] == ["git", "remote", "add"]:
-                    result.returncode = 0
-                    result.stderr = b""
-                elif cmd[0:2] == ["git", "push"]:
-                    result.returncode = 0
-                    result.stderr = b""
-                else:
-                    result.returncode = 0
-                    result.stderr = b""
+                # Return code 1 only for "git remote get-url", 0 for everything else
+                result.returncode = 1 if cmd[0:3] == ["git", "remote", "get-url"] else 0
                 return result
 
             mock_subprocess.run.side_effect = subprocess_side_effect
