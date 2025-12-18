@@ -402,48 +402,87 @@ Generated with SpecInit
                     await progress_callback(
                         "github_setup",
                         "skipped",
-                        {"name": "GitHub token not found - skipping GitHub integration"},
+                        {"name": "GitHub token not found - please run: specinit config"},
                     )
                 return
 
-            github = GitHubService(token=token)
-
-            # Parse repo URL
+            # Parse and validate repo URL first (before creating service)
             repo_url = github_config.get("repo_url", "")
             if not repo_url:
                 if progress_callback:
                     await progress_callback(
                         "github_setup",
                         "skipped",
-                        {"name": "No repository URL provided - skipping GitHub integration"},
+                        {"name": "No repository URL provided"},
                     )
                 return
 
-            owner, repo_name = github.parse_repo_url(repo_url)
+            # Security validation - prevent command injection
+            if repo_url.startswith("-"):
+                if progress_callback:
+                    await progress_callback(
+                        "github_setup",
+                        "failed",
+                        {"name": "Invalid repository URL: cannot start with dash"},
+                    )
+                return
 
-            # Create repository if requested and doesn't exist
-            if github_config.get("create_repo", False) and not github.repo_exists(owner, repo_name):
-                github.create_repo(
-                    name=repo_name,
-                    description=f"{context['project_name']} - "
-                    f"As {context['user_story']['role']}, "
-                    f"I want to {context['user_story']['action']}",
-                    private=False,
-                )
+            # Use context manager to ensure session cleanup
+            with GitHubService(token=token) as github:
+                # Validate URL format and extract owner/repo
+                try:
+                    owner, repo_name = github.parse_repo_url(repo_url)
+                except ValueError as e:
+                    if progress_callback:
+                        await progress_callback(
+                            "github_setup",
+                            "failed",
+                            {"name": f"Invalid repository URL: {e}"},
+                        )
+                    return
 
-            # Set up git remote and push initial commit
-            await asyncio.to_thread(self._setup_github_remote_and_push, repo_url)
+                # Create repository if requested and doesn't exist
+                if github_config.get("create_repo", False):
+                    try:
+                        if not github.repo_exists(owner, repo_name):
+                            github.create_repo(
+                                name=repo_name,
+                                description=f"{context['project_name']} - "
+                                f"As {context['user_story']['role']}, "
+                                f"I want to {context['user_story']['action']}",
+                                private=False,
+                            )
+                    except Exception as e:
+                        if progress_callback:
+                            await progress_callback(
+                                "github_setup",
+                                "failed",
+                                {"name": f"Failed to create repository: {e}"},
+                            )
+                        return
 
-            # Create issues from product spec (unless YOLO mode which handles this differently)
-            if not github_config.get("yolo_mode", False):
-                await self._create_github_issues(github, owner, repo_name, context)
+                # Set up git remote and push initial commit
+                try:
+                    await asyncio.to_thread(self._setup_github_remote_and_push, repo_url)
+                except subprocess.CalledProcessError as e:
+                    if progress_callback:
+                        await progress_callback(
+                            "github_setup",
+                            "failed",
+                            {"name": f"Failed to push to GitHub: {e}"},
+                        )
+                    return
 
-            if progress_callback:
-                await progress_callback(
-                    "github_setup",
-                    "completed",
-                    {"name": "GitHub repository configured and issues created"},
-                )
+                # Create issues from product spec (unless YOLO mode which handles this differently)
+                if not github_config.get("yolo_mode", False):
+                    await self._create_github_issues(github, owner, repo_name, context)
+
+                if progress_callback:
+                    await progress_callback(
+                        "github_setup",
+                        "completed",
+                        {"name": "GitHub repository configured and issues created"},
+                    )
 
         except Exception as e:
             logger = logging.getLogger(__name__)
@@ -452,7 +491,7 @@ Generated with SpecInit
                 await progress_callback(
                     "github_setup",
                     "failed",
-                    {"name": f"GitHub integration failed: {e}"},
+                    {"name": "GitHub integration failed: check your network connection"},
                 )
             # Don't fail the whole generation if GitHub integration fails
             return
@@ -490,7 +529,7 @@ Generated with SpecInit
         )
 
     async def _create_github_issues(
-        self, github: Any, owner: str, repo_name: str, context: dict[str, Any]
+        self, github: GitHubService, owner: str, repo_name: str, context: dict[str, Any]
     ) -> None:
         """Create GitHub issues from the product specification."""
         # Read product spec

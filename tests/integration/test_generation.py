@@ -317,6 +317,9 @@ class TestGenerationOrchestrator:
             mock_gh = MagicMock()
             mock_gh.parse_repo_url.return_value = ("testowner", "testrepo")
             mock_gh.repo_exists.return_value = False
+            # Make the mock work as a context manager
+            mock_gh.__enter__.return_value = mock_gh
+            mock_gh.__exit__.return_value = None
             mock_gh_class.return_value = mock_gh
 
             # Mock subprocess for git operations
@@ -438,3 +441,63 @@ class TestGenerationOrchestrator:
             # Generation should still succeed despite GitHub error
             assert "path" in result
             assert "total_cost" in result
+
+    @pytest.mark.asyncio
+    async def test_github_integration_validates_url_security(
+        self,
+        temp_dir: Path,
+        mock_claude_response: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """GitHub integration should reject URLs that could cause command injection."""
+        monkeypatch.setenv("HOME", str(temp_dir))
+        configure_git_in_temp_home(temp_dir)
+
+        with (
+            patch("specinit.generator.orchestrator.Anthropic") as mock_anthropic,
+            patch("specinit.generator.orchestrator.ConfigManager") as mock_config,
+            patch("specinit.generator.orchestrator.HistoryManager") as mock_history,
+            patch("specinit.generator.orchestrator.GitHubService") as mock_gh_class,
+        ):
+            mock_client = MagicMock()
+            mock_client.messages.create.return_value = mock_claude_response
+            mock_anthropic.return_value = mock_client
+
+            mock_config_instance = MagicMock()
+            mock_config_instance.get_api_key.return_value = "sk-ant-test"
+            mock_config_instance.get.return_value = "claude-sonnet-4-5-20250929"
+            mock_config.return_value = mock_config_instance
+
+            mock_history_instance = MagicMock()
+            mock_history_instance.add_project.return_value = 1
+            mock_history.return_value = mock_history_instance
+
+            # Mock GitHub service
+            mock_gh_class.get_token.return_value = "ghp_test_token"
+
+            project_dir = temp_dir / "output"
+            project_dir.mkdir()
+
+            orchestrator = GenerationOrchestrator(
+                output_dir=project_dir,
+                project_name="test-project",
+            )
+
+            # Run with malicious repo URL (starts with dash)
+            result = await orchestrator.generate(
+                platforms=["web"],
+                user_story={"role": "dev", "action": "test", "outcome": "verify"},
+                features=["Feature"],
+                tech_stack={"frontend": [], "backend": [], "database": [], "tools": []},
+                aesthetics=[],
+                github_config={
+                    "enabled": True,
+                    "repo_url": "--flag-injection",
+                    "create_repo": True,
+                },
+            )
+
+            # Generation should succeed but skip GitHub integration
+            assert "path" in result
+            # GitHubService should not be instantiated due to security check
+            mock_gh_class.assert_not_called()
