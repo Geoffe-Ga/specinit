@@ -501,3 +501,133 @@ class TestGenerationOrchestrator:
             assert "path" in result
             # GitHubService should not be instantiated due to security check
             mock_gh_class.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_github_integration_handles_repo_creation_failure(
+        self,
+        temp_dir: Path,
+        mock_claude_response: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """GitHub integration should handle repo creation failure gracefully."""
+        monkeypatch.setenv("HOME", str(temp_dir))
+        configure_git_in_temp_home(temp_dir)
+
+        with (
+            patch("specinit.generator.orchestrator.Anthropic") as mock_anthropic,
+            patch("specinit.generator.orchestrator.ConfigManager") as mock_config,
+            patch("specinit.generator.orchestrator.HistoryManager") as mock_history,
+            patch("specinit.generator.orchestrator.GitHubService") as mock_gh_class,
+        ):
+            mock_client = MagicMock()
+            mock_client.messages.create.return_value = mock_claude_response
+            mock_anthropic.return_value = mock_client
+
+            mock_config_instance = MagicMock()
+            mock_config_instance.get_api_key.return_value = "sk-ant-test"
+            mock_config_instance.get.return_value = "claude-sonnet-4-5-20250929"
+            mock_config.return_value = mock_config_instance
+
+            mock_history_instance = MagicMock()
+            mock_history_instance.add_project.return_value = 1
+            mock_history.return_value = mock_history_instance
+
+            # Mock GitHub service
+            mock_gh_class.get_token.return_value = "ghp_test_token"
+            mock_gh = MagicMock()
+            mock_gh.parse_repo_url.return_value = ("testowner", "testrepo")
+            mock_gh.repo_exists.return_value = False
+            # Make repo creation fail
+            mock_gh.create_repo.side_effect = Exception("API Error")
+            mock_gh.__enter__.return_value = mock_gh
+            mock_gh.__exit__.return_value = None
+            mock_gh_class.return_value = mock_gh
+
+            project_dir = temp_dir / "output"
+            project_dir.mkdir()
+
+            orchestrator = GenerationOrchestrator(
+                output_dir=project_dir,
+                project_name="test-project",
+            )
+
+            # Run with GitHub config that will fail on repo creation
+            result = await orchestrator.generate(
+                platforms=["web"],
+                user_story={"role": "dev", "action": "test", "outcome": "verify"},
+                features=["Feature"],
+                tech_stack={"frontend": [], "backend": [], "database": [], "tools": []},
+                aesthetics=[],
+                github_config={
+                    "enabled": True,
+                    "repo_url": "https://github.com/testowner/testrepo",
+                    "create_repo": True,
+                },
+            )
+
+            # Generation should succeed despite GitHub failure
+            assert "path" in result
+            # Repo creation should have been attempted
+            mock_gh.create_repo.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_github_integration_handles_missing_token(
+        self,
+        temp_dir: Path,
+        mock_claude_response: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """GitHub integration should handle missing token gracefully."""
+        monkeypatch.setenv("HOME", str(temp_dir))
+        configure_git_in_temp_home(temp_dir)
+
+        with (
+            patch("specinit.generator.orchestrator.Anthropic") as mock_anthropic,
+            patch("specinit.generator.orchestrator.ConfigManager") as mock_config,
+            patch("specinit.generator.orchestrator.HistoryManager") as mock_history,
+            patch("specinit.generator.orchestrator.GitHubService") as mock_gh_class,
+        ):
+            mock_client = MagicMock()
+            mock_client.messages.create.return_value = mock_claude_response
+            mock_anthropic.return_value = mock_client
+
+            mock_config_instance = MagicMock()
+            mock_config_instance.get_api_key.return_value = "sk-ant-test"
+            mock_config_instance.get.return_value = "claude-sonnet-4-5-20250929"
+            mock_config.return_value = mock_config_instance
+
+            mock_history_instance = MagicMock()
+            mock_history_instance.add_project.return_value = 1
+            mock_history.return_value = mock_history_instance
+
+            # Mock GitHub service - return None for get_token
+            mock_gh_class.get_token.return_value = None
+
+            project_dir = temp_dir / "output"
+            project_dir.mkdir()
+
+            orchestrator = GenerationOrchestrator(
+                output_dir=project_dir,
+                project_name="test-project",
+            )
+
+            # Run with GitHub config but missing token
+            result = await orchestrator.generate(
+                platforms=["web"],
+                user_story={"role": "dev", "action": "test", "outcome": "verify"},
+                features=["Feature"],
+                tech_stack={"frontend": [], "backend": [], "database": [], "tools": []},
+                aesthetics=[],
+                github_config={
+                    "enabled": True,
+                    "repo_url": "https://github.com/testowner/testrepo",
+                    "create_repo": True,
+                },
+            )
+
+            # Generation should succeed but skip GitHub
+            assert "path" in result
+            # get_token should be called, but GitHubService not instantiated
+            mock_gh_class.get_token.assert_called_once()
+            # GitHubService constructor should NOT be called
+            assert mock_gh_class.call_count == 0
