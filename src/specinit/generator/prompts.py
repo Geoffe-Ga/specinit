@@ -283,6 +283,15 @@ select = [
   - Use `npx expo install <package>` to ensure version compatibility
   - Avoid manually specifying versions that conflict with Expo SDK
 
+### For Expo projects with web support:
+- CRITICAL: Include web-specific dependencies when "web" is a target platform:
+  - react-dom: 18.3.1 (required for web rendering)
+  - react-native-web: ~0.19.12 (bridges React Native to web)
+  - @expo/metro-runtime: ~4.0.0 (Expo web runtime)
+- Configure app.json to include "web" in platforms array
+- Ensure metro.config.js supports web platform
+- Note: Web support requires additional setup compared to native platforms
+
 ### .pre-commit-config.yaml
 - Use LOCAL hooks (not external repos) to ensure same versions as CI
 - Run via `python -m <tool>` for consistency
