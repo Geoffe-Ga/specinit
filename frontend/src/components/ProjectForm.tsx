@@ -60,7 +60,7 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
       name: '',
       platforms: [],
       userStory: { role: '', action: '', outcome: '' },
-      features: [],
+      features: [''],
       techStack: { frontend: [], backend: [], database: [], tools: [] },
       aesthetics: [],
       github: {
@@ -159,7 +159,7 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-xl font-semibold mb-4">Features</h2>
           <p className="text-gray-600 mb-4">
-            Add up to 10 features for your project.
+            Add up to 20 features for your project.
           </p>
 
           <FeatureList

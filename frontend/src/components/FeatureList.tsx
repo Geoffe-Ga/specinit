@@ -29,34 +29,30 @@ export function FeatureList({ features, onChange, error }: FeatureListProps) {
     onChange(newFeatures)
   }
 
-  // Ensure at least one feature field exists
-  if (features.length === 0) {
-    onChange([''])
-    return null
-  }
-
   return (
     <div className="space-y-4">
       {/* Feature fields */}
-      {features.map((feature, index) => (
-        <div key={index} className="relative">
-          <div className="flex items-start gap-2">
-            <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Feature {index + 1}
-              </label>
-              <textarea
-                value={feature}
-                onChange={(e) => updateFeature(index, e.target.value)}
-                maxLength={MAX_FEATURE_LENGTH}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y min-h-[80px]"
-                placeholder="Describe this feature (1-2 words for simple features, or write detailed requirements)..."
-              />
-              <div className="mt-1 flex items-center justify-between text-xs text-gray-500">
-                <span>{feature.length} / {MAX_FEATURE_LENGTH} characters</span>
-                <span>{feature.trim().split(/\s+/).filter(w => w).length} words</span>
+      {features.map((feature, index) => {
+        const wordCount = feature.trim() ? feature.trim().split(/\s+/).filter(w => w).length : 0
+        return (
+          <div key={index} className="relative">
+            <div className="flex items-start gap-2">
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Feature {index + 1}
+                </label>
+                <textarea
+                  value={feature}
+                  onChange={(e) => updateFeature(index, e.target.value)}
+                  maxLength={MAX_FEATURE_LENGTH}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y min-h-[80px]"
+                  placeholder="Describe this feature (1-2 words for simple features, or write detailed requirements)..."
+                />
+                <div className="mt-1 flex items-center justify-between text-xs text-gray-500">
+                  <span>{feature.length} / {MAX_FEATURE_LENGTH} characters</span>
+                  <span>{wordCount} word{wordCount !== 1 ? 's' : ''}</span>
+                </div>
               </div>
-            </div>
             <button
               type="button"
               onClick={() => removeFeature(index)}
@@ -68,7 +64,8 @@ export function FeatureList({ features, onChange, error }: FeatureListProps) {
             </button>
           </div>
         </div>
-      ))}
+        )
+      })}
 
       {/* Add feature button */}
       <button
