@@ -286,7 +286,7 @@ select = [
 ### For Expo projects with web support:
 - CRITICAL: Include web-specific dependencies when "web" is a target platform:
   - react-dom: 18.3.1 (required for web rendering)
-  - react-native-web: ~0.19.12 (bridges React Native to web)
+  - react-native-web: ~0.19.13 (bridges React Native to web, compatible with SDK 52)
   - @expo/metro-runtime: ~4.0.0 (Expo web runtime)
 - Configure app.json to include "web" in platforms array
 - Ensure metro.config.js supports web platform
