@@ -1,6 +1,7 @@
 """Generation orchestrator for the 8-step process."""
 
 import asyncio
+import logging
 import subprocess
 import time
 from collections.abc import Callable, Coroutine
@@ -154,22 +155,32 @@ class GenerationOrchestrator:
 
     async def _call_claude(self, prompt: str, step_id: str) -> str:
         """Make a Claude API call and track costs."""
+        logger = logging.getLogger(__name__)
 
         def create_message() -> Any:
-            return self.client.messages.create(
+            logger.info(f"Creating message for step '{step_id}' with model '{self.model}'...")
+            result = self.client.messages.create(
                 model=self.model,
                 max_tokens=8192,
                 messages=[{"role": "user", "content": prompt}],
             )
+            logger.info(f"Message created successfully for step '{step_id}'")
+            return result
 
         # Add timeout to prevent hanging indefinitely (5 minutes should be enough for any API call)
+        logger.info(f"Starting API call for step '{step_id}'...")
         try:
             response = await asyncio.wait_for(asyncio.to_thread(create_message), timeout=300.0)
+            logger.info(f"API call completed for step '{step_id}'")
         except TimeoutError as e:
+            logger.error(f"API call timed out for step '{step_id}'")
             raise RuntimeError(
                 f"Claude API call timed out after 5 minutes for step '{step_id}'. "
                 "This may indicate a network issue or API slowness."
             ) from e
+        except Exception as e:
+            logger.error(f"API call failed for step '{step_id}': {e}")
+            raise
 
         # Track costs
         input_tokens = response.usage.input_tokens
@@ -184,8 +195,12 @@ class GenerationOrchestrator:
 
     async def _generate_product_spec(self, context: dict[str, Any]) -> None:
         """Step 1: Generate product specification."""
+        logger = logging.getLogger(__name__)
+        logger.info("Building product spec prompt...")
         prompt = self.prompt_builder.build_product_spec_prompt(context)
+        logger.info(f"Prompt built, length: {len(prompt)} chars. Calling Claude API...")
         spec_content = await self._call_claude(prompt, "product_spec")
+        logger.info(f"Received response from Claude API, length: {len(spec_content)} chars")
 
         # Write to plan directory
         self.file_writer.write("plan/product-spec.md", spec_content)
