@@ -27,6 +27,7 @@ export interface ProjectConfig {
   techStack: TechStack
   aesthetics: string[]
   github: GitHubConfig
+  additionalContext?: string
 }
 
 export interface GenerationResult {

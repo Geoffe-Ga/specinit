@@ -438,3 +438,122 @@ class TestFeatureValidation:
             aesthetics=[],
         )
         assert len(config.features[1]) == 2000
+
+
+class TestAdditionalContext:
+    """Tests for optional additional_context field (Issue #22)."""
+
+    def test_project_config_accepts_additional_context(self):
+        """ProjectConfig should accept optional additional_context field."""
+        config = ProjectConfig(
+            name="test-project",
+            platforms=["web"],
+            user_story={
+                "role": "developer",
+                "action": "build apps",
+                "outcome": "save time",
+            },
+            features=["Feature 1"],
+            tech_stack={
+                "frontend": ["React"],
+                "backend": ["FastAPI"],
+                "database": [],
+                "tools": [],
+            },
+            aesthetics=["minimalist"],
+            additional_context="This is additional context for the project generation.",
+        )
+
+        assert config.additional_context == "This is additional context for the project generation."
+
+    def test_project_config_additional_context_is_optional(self):
+        """ProjectConfig should work without additional_context field."""
+        config = ProjectConfig(
+            name="test-project",
+            platforms=["web"],
+            user_story={
+                "role": "developer",
+                "action": "build apps",
+                "outcome": "save time",
+            },
+            features=["Feature 1"],
+            tech_stack={
+                "frontend": ["React"],
+                "backend": ["FastAPI"],
+                "database": [],
+                "tools": [],
+            },
+            aesthetics=["minimalist"],
+        )
+
+        assert config.additional_context is None
+
+    def test_cost_estimate_accepts_additional_context(self, client):
+        """Cost estimate endpoint should accept additional_context."""
+        response = client.post(
+            "/api/estimate",
+            json={
+                "name": "test-project",
+                "platforms": ["web"],
+                "user_story": {
+                    "role": "developer",
+                    "action": "build apps",
+                    "outcome": "save time",
+                },
+                "features": ["Feature 1"],
+                "tech_stack": {
+                    "frontend": ["React"],
+                    "backend": ["FastAPI"],
+                    "database": [],
+                    "tools": [],
+                },
+                "aesthetics": ["minimalist"],
+                "additional_context": "Detailed requirements and constraints.",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "min_cost" in data
+        assert "max_cost" in data
+
+    def test_websocket_accepts_additional_context(self, client):
+        """WebSocket should accept additional_context in config."""
+        with patch("specinit.server.app.GenerationOrchestrator") as mock_orchestrator:
+            mock_instance = MagicMock()
+            mock_orchestrator.return_value = mock_instance
+
+            async def mock_generate(**_kwargs):
+                return {
+                    "path": Path("/tmp/test-project"),
+                    "total_cost": 1.50,
+                    "generation_time": 30.0,
+                }
+
+            mock_instance.generate.side_effect = mock_generate
+
+            with client.websocket_connect("/ws/generate") as websocket:
+                websocket.send_json(
+                    {
+                        "name": "test-project",
+                        "platforms": ["web"],
+                        "user_story": {
+                            "role": "developer",
+                            "action": "build apps",
+                            "outcome": "save time",
+                        },
+                        "features": ["Feature 1"],
+                        "tech_stack": {
+                            "frontend": ["React"],
+                            "backend": ["FastAPI"],
+                            "database": [],
+                            "tools": [],
+                        },
+                        "aesthetics": ["minimalist"],
+                        "additional_context": "Additional project context",
+                    }
+                )
+
+                response = websocket.receive_json()
+                # Should not error - should process successfully
+                assert response["type"] in ["progress", "complete"]

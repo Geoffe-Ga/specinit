@@ -59,8 +59,9 @@ export function FeatureList({ features, onChange, error }: FeatureListProps) {
               disabled={features.length === 1}
               className="mt-7 p-2 text-gray-400 hover:text-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
               title={features.length === 1 ? "Cannot remove the last feature" : "Remove feature"}
+              aria-label={features.length === 1 ? "Cannot remove the last feature" : `Remove feature ${index + 1}`}
             >
-              <X className="w-5 h-5" />
+              <X className="w-5 h-5" aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -73,8 +74,9 @@ export function FeatureList({ features, onChange, error }: FeatureListProps) {
         onClick={addFeature}
         disabled={features.length >= MAX_FEATURES}
         className="flex items-center gap-2 px-4 py-2 text-blue-600 border border-blue-600 rounded-md hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed"
+        aria-label={`Add feature (${features.length} of ${MAX_FEATURES} features used)`}
       >
-        <Plus className="w-5 h-5" />
+        <Plus className="w-5 h-5" aria-hidden="true" />
         Add Feature ({features.length}/{MAX_FEATURES})
       </button>
 
