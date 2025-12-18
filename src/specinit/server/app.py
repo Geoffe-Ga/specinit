@@ -11,7 +11,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 from specinit.generator.orchestrator import GenerationOrchestrator
 from specinit.github.service import GitHubService
@@ -76,7 +76,7 @@ class ProjectConfig(BaseModel):
     tech_stack: dict[str, list[str]]  # frontend, backend, database, tools
     aesthetics: list[str]
     github: GitHubConfigModel | None = None
-    additional_context: str | None = None
+    additional_context: str | None = Field(None, max_length=10000)
 
 
 class GitHubTokenRequest(BaseModel):
