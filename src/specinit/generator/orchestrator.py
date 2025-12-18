@@ -162,7 +162,14 @@ class GenerationOrchestrator:
                 messages=[{"role": "user", "content": prompt}],
             )
 
-        response = await asyncio.to_thread(create_message)
+        # Add timeout to prevent hanging indefinitely (5 minutes should be enough for any API call)
+        try:
+            response = await asyncio.wait_for(asyncio.to_thread(create_message), timeout=300.0)
+        except TimeoutError as e:
+            raise RuntimeError(
+                f"Claude API call timed out after 5 minutes for step '{step_id}'. "
+                "This may indicate a network issue or API slowness."
+            ) from e
 
         # Track costs
         input_tokens = response.usage.input_tokens
