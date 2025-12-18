@@ -33,7 +33,10 @@ const projectSchema = z.object({
     yoloMode: z.boolean(),
     tokenConfigured: z.boolean(),
   }),
-  additionalContext: z.string().optional(),
+  additionalContext: z
+    .string()
+    .max(10000, 'Additional context must be less than 10,000 characters')
+    .optional(),
 })
 
 type FormData = z.infer<typeof projectSchema>
@@ -237,8 +240,16 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
               placeholder="Example: This project should follow Clean Architecture principles. The authentication system must support OAuth2 and JWT tokens. All API responses should follow the JSON:API specification..."
             />
             <p className="mt-1 text-sm text-gray-500">
-              {currentValues.additionalContext?.length || 0} characters
+              {currentValues.additionalContext?.length || 0} / 10,000 characters
+              {currentValues.additionalContext && currentValues.additionalContext.length > 5000 && (
+                <span className="ml-2 text-amber-600">
+                  Note: Large amounts of context may increase generation costs
+                </span>
+              )}
             </p>
+            {errors.additionalContext && (
+              <p className="mt-1 text-sm text-red-600">{errors.additionalContext.message}</p>
+            )}
           </div>
         </div>
       )}
