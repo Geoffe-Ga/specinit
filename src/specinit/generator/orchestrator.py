@@ -8,6 +8,7 @@ from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
+import requests
 from anthropic import Anthropic
 
 from specinit.generator.cost import CostTracker
@@ -418,12 +419,14 @@ Generated with SpecInit
                 return
 
             # Security validation - prevent command injection
-            if repo_url.startswith("-"):
+            # Check for shell metacharacters and dangerous patterns
+            dangerous_chars = [";", "&", "|", "`", "$", "(", ")", "<", ">", "\n", "\r"]
+            if repo_url.startswith("-") or any(char in repo_url for char in dangerous_chars):
                 if progress_callback:
                     await progress_callback(
                         "github_setup",
                         "failed",
-                        {"name": "Invalid repository URL: cannot start with dash"},
+                        {"name": "Invalid repository URL: contains unsafe characters"},
                     )
                 return
 
@@ -484,9 +487,13 @@ Generated with SpecInit
                         {"name": "GitHub repository configured and issues created"},
                     )
 
-        except Exception as e:
+        except (
+            requests.exceptions.RequestException,
+            subprocess.CalledProcessError,
+            ValueError,
+        ) as e:
             logger = logging.getLogger(__name__)
-            logger.error(f"GitHub integration failed: {e}")
+            logger.error("GitHub integration failed: %s", e, exc_info=True)
             if progress_callback:
                 await progress_callback(
                     "github_setup",
@@ -521,6 +528,13 @@ Generated with SpecInit
                 check=True,
             )
 
+        # Ensure we're on main branch before pushing
+        subprocess.run(
+            ["git", "checkout", "main"],
+            cwd=self.project_path,
+            check=True,
+        )
+
         # Push to GitHub
         subprocess.run(
             ["git", "push", "-u", "origin", "main"],
@@ -532,14 +546,14 @@ Generated with SpecInit
         self, github: GitHubService, owner: str, repo_name: str, context: dict[str, Any]
     ) -> None:
         """Create GitHub issues from the product specification."""
-        # Read product spec
-        spec_path = self.project_path / "plan" / "product-spec.md"
-        if not spec_path.exists():
-            return
-
         # Create an issue for each feature
         for feature in context["features"]:
-            issue_title = f"Implement: {feature[:80]}"  # Truncate to reasonable length
+            # Truncate title to reasonable length with ellipsis if needed
+            max_title_len = 80
+            if len(feature) > max_title_len:
+                issue_title = f"Implement: {feature[:max_title_len]}..."
+            else:
+                issue_title = f"Implement: {feature}"
             issue_body = f"""## Feature Description
 {feature}
 
