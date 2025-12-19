@@ -105,3 +105,107 @@ class TestPromptBuilder:
         prompt = builder.build_product_spec_prompt(context)
 
         assert "Line 1\nLine 2\nLine 3" in prompt
+
+    def test_readme_prompt_basic_generation(self):
+        """README prompt should include spec content and project files."""
+        builder = PromptBuilder()
+        context = {
+            "project_name": "test-project",
+            "platforms": ["web"],
+            "user_story": {"role": "developer", "action": "build app", "outcome": "deploy it"},
+            "features": ["User authentication", "Data visualization"],
+            "tech_stack": {
+                "frontend": ["React"],
+                "backend": ["FastAPI"],
+                "database": [],
+                "tools": [],
+            },
+            "aesthetics": ["modern"],
+        }
+        spec_content = "# Product Spec\n\nThis is a test specification."
+        project_files = ["src/main.py", "tests/test_main.py", "README.md"]
+
+        prompt = builder.build_readme_prompt(context, spec_content, project_files)
+
+        assert "test-project" in prompt
+        assert "User authentication" in prompt
+        assert "Data visualization" in prompt
+        assert "src/main.py" in prompt
+        assert "tests/test_main.py" in prompt
+
+    def test_readme_prompt_includes_spec_content(self):
+        """README prompt should include product specification."""
+        builder = PromptBuilder()
+        context = {
+            "project_name": "test",
+            "platforms": ["web"],
+            "user_story": {"role": "user", "action": "test", "outcome": "success"},
+            "features": ["Feature 1"],
+            "tech_stack": {"frontend": [], "backend": [], "database": [], "tools": []},
+            "aesthetics": [],
+        }
+        spec_content = "UNIQUE_SPEC_CONTENT_12345"
+        project_files = ["main.py"]
+
+        prompt = builder.build_readme_prompt(context, spec_content, project_files)
+
+        assert "UNIQUE_SPEC_CONTENT_12345" in prompt
+
+    def test_readme_prompt_handles_many_files(self):
+        """README prompt should handle projects with many files."""
+        builder = PromptBuilder()
+        context = {
+            "project_name": "large-project",
+            "platforms": ["web", "mobile"],
+            "user_story": {"role": "user", "action": "test", "outcome": "success"},
+            "features": ["Feature 1"],
+            "tech_stack": {"frontend": [], "backend": [], "database": [], "tools": []},
+            "aesthetics": [],
+        }
+        spec_content = "Spec"
+        # Create a list of many files
+        project_files = [f"src/module{i}.py" for i in range(50)]
+
+        prompt = builder.build_readme_prompt(context, spec_content, project_files)
+
+        # Should include project name and at least some files
+        assert "large-project" in prompt
+        assert "src/module0.py" in prompt
+
+    def test_readme_prompt_includes_platform_info(self):
+        """README prompt should include platform-specific information."""
+        builder = PromptBuilder()
+        context = {
+            "project_name": "multi-platform",
+            "platforms": ["web", "ios", "android"],
+            "user_story": {"role": "user", "action": "test", "outcome": "success"},
+            "features": ["Feature 1"],
+            "tech_stack": {"frontend": [], "backend": [], "database": [], "tools": []},
+            "aesthetics": [],
+        }
+        spec_content = "Spec"
+        project_files = ["app.py"]
+
+        prompt = builder.build_readme_prompt(context, spec_content, project_files)
+
+        # Should mention platforms
+        assert "web" in prompt.lower() or "platforms" in prompt.lower()
+
+    def test_readme_prompt_with_additional_context(self):
+        """README prompt should include additional context when provided."""
+        builder = PromptBuilder()
+        context = {
+            "project_name": "test",
+            "platforms": ["web"],
+            "user_story": {"role": "user", "action": "test", "outcome": "success"},
+            "features": ["Feature 1"],
+            "tech_stack": {"frontend": [], "backend": [], "database": [], "tools": []},
+            "aesthetics": [],
+            "additional_context": "This project uses Clean Architecture",
+        }
+        spec_content = "Spec"
+        project_files = ["main.py"]
+
+        prompt = builder.build_readme_prompt(context, spec_content, project_files)
+
+        assert "This project uses Clean Architecture" in prompt
