@@ -7,6 +7,7 @@ import time
 from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import Any, ClassVar, cast
+from urllib.parse import urlparse
 
 import requests
 from anthropic import Anthropic
@@ -372,6 +373,34 @@ Generated with SpecInit
         # Write README to docs/ directory
         self.file_writer.write("docs/README.md", readme_content)
 
+    def _validate_repo_url(self, repo_url: str) -> None:
+        """Validate repository URL for security.
+
+        Args:
+            repo_url: The repository URL to validate
+
+        Raises:
+            ValueError: If the URL is invalid or potentially dangerous
+        """
+        parsed = urlparse(repo_url)
+
+        # Validate URL structure
+        if not parsed.netloc and "/" not in repo_url:
+            # Might be short form "owner/repo", which is handled by parse_repo_url
+            pass
+        elif parsed.scheme and parsed.scheme not in ("https", "http", "ssh", "git"):
+            # Reject dangerous schemes like file://, javascript:, data:, etc.
+            raise ValueError(f"Invalid URL scheme: {parsed.scheme}")
+
+        # Check for dangerous characters that could be interpreted as flags
+        if repo_url.startswith("-"):
+            raise ValueError("URL cannot start with dash")
+
+        # Check for shell metacharacters
+        dangerous_chars = [";", "&", "|", "`", "$", "(", ")", "<", ">", "\n", "\r"]
+        if any(char in repo_url for char in dangerous_chars):
+            raise ValueError("URL contains unsafe shell characters")
+
     async def _github_integration(
         self, context: dict[str, Any], progress_callback: ProgressCallback | None
     ) -> None:
@@ -418,15 +447,15 @@ Generated with SpecInit
                     )
                 return
 
-            # Security validation - prevent command injection
-            # Check for shell metacharacters and dangerous patterns
-            dangerous_chars = [";", "&", "|", "`", "$", "(", ")", "<", ">", "\n", "\r"]
-            if repo_url.startswith("-") or any(char in repo_url for char in dangerous_chars):
+            # Security validation - prevent command injection and malicious URLs
+            try:
+                self._validate_repo_url(repo_url)
+            except ValueError as e:
                 if progress_callback:
                     await progress_callback(
                         "github_setup",
                         "failed",
-                        {"name": "Invalid repository URL: contains unsafe characters"},
+                        {"name": f"Invalid repository URL: {e}"},
                     )
                 return
 
