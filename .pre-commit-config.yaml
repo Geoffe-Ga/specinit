@@ -8,30 +8,17 @@ repos:
       - id: check-added-large-files
       - id: check-merge-conflict
 
-  # Use local hooks to ensure same tool versions as CI (installed via pip)
+  # Use local hooks that call validation scripts (ensures same checks as CI)
   - repo: local
     hooks:
-      - id: ruff
-        name: ruff
-        entry: python -m ruff check --fix
-        language: system
-        types: [python]
-        require_serial: true
-
-      - id: ruff-format
-        name: ruff-format
-        entry: python -m ruff format
-        language: system
-        types: [python]
-        require_serial: true
-
-      - id: mypy
-        name: mypy
-        entry: python -m mypy
+      - id: check-all
+        name: check-all (lint + test with coverage)
+        entry: ./scripts/check.sh
         language: system
         types: [python]
         pass_filenames: false
-        args: [src, --ignore-missing-imports]
+        require_serial: true
+        verbose: true
 
   # Use local shellcheck if available (install with: brew install shellcheck)
   - repo: local
