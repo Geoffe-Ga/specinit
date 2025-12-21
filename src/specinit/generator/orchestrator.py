@@ -511,6 +511,7 @@ Generated with SpecInit
             cwd=self.project_path,
             capture_output=True,
             check=False,
+            timeout=10,  # Fast operation, 10s is generous
         )
 
         if result.returncode == 0:
@@ -519,6 +520,7 @@ Generated with SpecInit
                 ["git", "remote", "set-url", "origin", repo_url],
                 cwd=self.project_path,
                 check=True,
+                timeout=10,
             )
         else:
             # Add new remote
@@ -526,6 +528,7 @@ Generated with SpecInit
                 ["git", "remote", "add", "origin", repo_url],
                 cwd=self.project_path,
                 check=True,
+                timeout=10,
             )
 
         # Ensure we're on main branch before pushing
@@ -533,13 +536,15 @@ Generated with SpecInit
             ["git", "checkout", "main"],
             cwd=self.project_path,
             check=True,
+            timeout=10,
         )
 
-        # Push to GitHub
+        # Push to GitHub (can be slow for large repos, so give it 5 minutes)
         subprocess.run(
             ["git", "push", "-u", "origin", "main"],
             cwd=self.project_path,
             check=True,
+            timeout=300,  # 5 minutes for large repos with slow networks
         )
 
     async def _create_github_issues(
