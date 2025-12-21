@@ -482,7 +482,7 @@ Generated with SpecInit
                                 description=f"{context['project_name']} - "
                                 f"As {context['user_story']['role']}, "
                                 f"I want to {context['user_story']['action']}",
-                                private=False,
+                                private=github_config.get("private", False),
                             )
                     except Exception as e:
                         if progress_callback:
