@@ -828,3 +828,165 @@ class TestGenerationOrchestrator:
             assert "path" in result
             # GitHubService should NOT be instantiated
             assert mock_gh_class.call_count == 0
+
+    async def test_github_integration_handles_git_push_failure(
+        self,
+        temp_dir: Path,
+        mock_claude_response: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """GitHub integration should handle git push failures gracefully."""
+        monkeypatch.setenv("HOME", str(temp_dir))
+        configure_git_in_temp_home(temp_dir)
+
+        with (
+            patch("specinit.generator.orchestrator.Anthropic") as mock_anthropic,
+            patch("specinit.generator.orchestrator.ConfigManager") as mock_config,
+            patch("specinit.generator.orchestrator.HistoryManager") as mock_history,
+            patch("specinit.generator.orchestrator.GitHubService") as mock_gh_class,
+            patch("subprocess.run") as mock_subprocess,
+        ):
+            mock_client = MagicMock()
+            mock_client.messages.create.return_value = mock_claude_response
+            mock_anthropic.return_value = mock_client
+
+            mock_config_instance = MagicMock()
+            mock_config_instance.get_api_key.return_value = "sk-ant-test"
+            mock_config_instance.get.return_value = "claude-sonnet-4-5-20250929"
+            mock_config.return_value = mock_config_instance
+
+            mock_history_instance = MagicMock()
+            mock_history_instance.add_project.return_value = 1
+            mock_history.return_value = mock_history_instance
+
+            # Mock GitHub service
+            mock_gh = MagicMock()
+            mock_gh.parse_repo_url.return_value = ("owner", "repo")
+            mock_gh.repo_exists.return_value = False
+            mock_gh.__enter__.return_value = mock_gh
+            mock_gh.__exit__.return_value = None
+            mock_gh_class.return_value = mock_gh
+            mock_gh_class.get_token.return_value = "ghp_test123"
+
+            # Mock subprocess to fail on git push
+            def subprocess_side_effect(*args, **kwargs):
+                cmd = args[0] if args else kwargs.get("args", [])
+                if "push" in cmd:
+                    raise subprocess.CalledProcessError(1, cmd, stderr=b"Authentication failed")
+                # Return 128 (error) for get-url check, 0 (success) for everything else
+                if len(cmd) > 2 and cmd[2] == "get-url":
+                    return MagicMock(returncode=128, stdout=b"", stderr=b"")
+                return MagicMock(returncode=0, stdout=b"", stderr=b"")
+
+            mock_subprocess.side_effect = subprocess_side_effect
+
+            project_dir = temp_dir / "output-push-fail"
+            project_dir.mkdir(exist_ok=True)
+
+            orchestrator = GenerationOrchestrator(
+                output_dir=project_dir,
+                project_name="test-project",
+            )
+
+            # Run generation
+            result = await orchestrator.generate(
+                platforms=["web"],
+                user_story={"role": "dev", "action": "test", "outcome": "verify"},
+                features=["Feature"],
+                tech_stack={"frontend": [], "backend": [], "database": [], "tools": []},
+                aesthetics=[],
+                github_config={
+                    "enabled": True,
+                    "repo_url": "https://github.com/owner/repo",
+                    "create_repo": True,
+                },
+            )
+
+            # Generation should succeed despite push failure
+            assert "path" in result
+
+    async def test_github_integration_updates_existing_remote(
+        self,
+        temp_dir: Path,
+        mock_claude_response: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """GitHub integration should update existing git remote."""
+        monkeypatch.setenv("HOME", str(temp_dir))
+        configure_git_in_temp_home(temp_dir)
+
+        with (
+            patch("specinit.generator.orchestrator.Anthropic") as mock_anthropic,
+            patch("specinit.generator.orchestrator.ConfigManager") as mock_config,
+            patch("specinit.generator.orchestrator.HistoryManager") as mock_history,
+            patch("specinit.generator.orchestrator.GitHubService") as mock_gh_class,
+            patch("subprocess.run") as mock_subprocess,
+        ):
+            mock_client = MagicMock()
+            mock_client.messages.create.return_value = mock_claude_response
+            mock_anthropic.return_value = mock_client
+
+            mock_config_instance = MagicMock()
+            mock_config_instance.get_api_key.return_value = "sk-ant-test"
+            mock_config_instance.get.return_value = "claude-sonnet-4-5-20250929"
+            mock_config.return_value = mock_config_instance
+
+            mock_history_instance = MagicMock()
+            mock_history_instance.add_project.return_value = 1
+            mock_history.return_value = mock_history_instance
+
+            # Mock GitHub service
+            mock_gh = MagicMock()
+            mock_gh.parse_repo_url.return_value = ("owner", "repo")
+            mock_gh.repo_exists.return_value = True
+            mock_gh.__enter__.return_value = mock_gh
+            mock_gh.__exit__.return_value = None
+            mock_gh_class.return_value = mock_gh
+            mock_gh_class.get_token.return_value = "ghp_test123"
+
+            # Track git remote set-url calls
+            set_url_called = []
+
+            # Mock subprocess - simulate existing remote
+            def subprocess_side_effect(*args, **kwargs):
+                cmd = args[0] if args else kwargs.get("args", [])
+                if "get-url" in cmd:
+                    # Remote exists
+                    return MagicMock(
+                        returncode=0, stdout=b"https://github.com/old/repo", stderr=b""
+                    )
+                if "set-url" in cmd:
+                    set_url_called.append(cmd)
+                    return MagicMock(returncode=0, stdout=b"", stderr=b"")
+                # Success for other commands
+                return MagicMock(returncode=0, stdout=b"", stderr=b"")
+
+            mock_subprocess.side_effect = subprocess_side_effect
+
+            project_dir = temp_dir / "output-update-remote"
+            project_dir.mkdir(exist_ok=True)
+
+            orchestrator = GenerationOrchestrator(
+                output_dir=project_dir,
+                project_name="test-project",
+            )
+
+            # Run generation
+            result = await orchestrator.generate(
+                platforms=["web"],
+                user_story={"role": "dev", "action": "test", "outcome": "verify"},
+                features=["Feature"],
+                tech_stack={"frontend": [], "backend": [], "database": [], "tools": []},
+                aesthetics=[],
+                github_config={
+                    "enabled": True,
+                    "repo_url": "https://github.com/owner/repo",
+                    "create_repo": False,  # Repo already exists
+                },
+            )
+
+            # Generation should succeed
+            assert "path" in result
+            # Should have called set-url to update remote
+            assert len(set_url_called) > 0
+            assert "set-url" in set_url_called[0]
