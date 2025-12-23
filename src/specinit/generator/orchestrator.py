@@ -2,18 +2,22 @@
 
 import asyncio
 import logging
+import os
 import subprocess
 import time
 from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import Any, ClassVar, cast
+from urllib.parse import urlparse
 
+import requests
 from anthropic import Anthropic
 
 from specinit.generator.cost import CostTracker
 from specinit.generator.file_writer import FileWriter
 from specinit.generator.prompts import PromptBuilder
 from specinit.generator.templates import TemplateSelector
+from specinit.github.service import GitHubService
 from specinit.storage.config import ConfigManager
 from specinit.storage.history import HistoryManager
 
@@ -58,6 +62,7 @@ class GenerationOrchestrator:
         tech_stack: dict[str, list[str]],
         aesthetics: list[str],
         additional_context: str | None = None,
+        github_config: dict[str, Any] | None = None,
         progress_callback: ProgressCallback | None = None,
     ) -> dict[str, Any]:
         """Run the full generation process."""
@@ -79,6 +84,7 @@ class GenerationOrchestrator:
             "aesthetics": aesthetics,
             "additional_context": additional_context,
             "template": template,
+            "github_config": github_config,
         }
 
         # Track project in history
@@ -108,6 +114,10 @@ class GenerationOrchestrator:
                             "cost": self.cost_tracker.get_step_cost(step_id),
                         },
                     )
+
+            # GitHub integration (if configured)
+            if github_config and github_config.get("enabled"):
+                await self._github_integration(context, progress_callback)
 
             # Calculate final stats
             generation_time = time.time() - start_time
@@ -363,3 +373,259 @@ Generated with SpecInit
 
         # Write README to docs/ directory
         self.file_writer.write("docs/README.md", readme_content)
+
+    def _validate_repo_url(self, repo_url: str) -> None:
+        """Validate repository URL for security.
+
+        Args:
+            repo_url: The repository URL to validate
+
+        Raises:
+            ValueError: If the URL is invalid or potentially dangerous
+        """
+        parsed = urlparse(repo_url)
+
+        # Validate URL structure
+        if not parsed.netloc and "/" not in repo_url:
+            # Might be short form "owner/repo", which is handled by parse_repo_url
+            pass
+        elif parsed.scheme and parsed.scheme not in ("https", "http", "ssh", "git"):
+            # Reject dangerous schemes like file://, javascript:, data:, etc.
+            raise ValueError(f"Invalid URL scheme: {parsed.scheme}")
+
+        # Check for dangerous characters that could be interpreted as flags
+        if repo_url.startswith("-"):
+            raise ValueError("URL cannot start with dash")
+
+        # Check for shell metacharacters
+        dangerous_chars = [";", "&", "|", "`", "$", "(", ")", "<", ">", "\n", "\r"]
+        if any(char in repo_url for char in dangerous_chars):
+            raise ValueError("URL contains unsafe shell characters")
+
+    async def _github_integration(
+        self, context: dict[str, Any], progress_callback: ProgressCallback | None
+    ) -> None:
+        """Set up GitHub repository and create initial issues.
+
+        This runs even in non-YOLO mode to provide basic GitHub integration:
+        - Create repository (if needed)
+        - Push initial commit
+        - Create issues from product spec
+
+        YOLO mode would additionally run the full automated workflow,
+        but that's not part of this fix.
+        """
+        github_config = context.get("github_config")
+        if not github_config:
+            return
+
+        if progress_callback:
+            await progress_callback(
+                "github_setup", "in_progress", {"name": "Setting up GitHub repository"}
+            )
+
+        try:
+            # Get GitHub token from keyring
+            token = GitHubService.get_token()
+            if not token:
+                # Token was supposed to be validated earlier, but handle gracefully
+                if progress_callback:
+                    await progress_callback(
+                        "github_setup",
+                        "skipped",
+                        {"name": "GitHub token not found - please run: specinit config"},
+                    )
+                return
+
+            # Parse and validate repo URL first (before creating service)
+            repo_url = github_config.get("repo_url", "")
+            if not repo_url:
+                if progress_callback:
+                    await progress_callback(
+                        "github_setup",
+                        "skipped",
+                        {"name": "No repository URL provided"},
+                    )
+                return
+
+            # Security validation - prevent command injection and malicious URLs
+            try:
+                self._validate_repo_url(repo_url)
+            except ValueError as e:
+                if progress_callback:
+                    await progress_callback(
+                        "github_setup",
+                        "failed",
+                        {"name": f"Invalid repository URL: {e}"},
+                    )
+                return
+
+            # Use context manager to ensure session cleanup
+            with GitHubService(token=token) as github:
+                # Validate URL format and extract owner/repo
+                try:
+                    owner, repo_name = github.parse_repo_url(repo_url)
+                except ValueError as e:
+                    if progress_callback:
+                        await progress_callback(
+                            "github_setup",
+                            "failed",
+                            {"name": f"Invalid repository URL: {e}"},
+                        )
+                    return
+
+                # Create repository if requested and doesn't exist
+                if github_config.get("create_repo", False):
+                    try:
+                        if not github.repo_exists(owner, repo_name):
+                            github.create_repo(
+                                name=repo_name,
+                                description=f"{context['project_name']} - "
+                                f"As {context['user_story']['role']}, "
+                                f"I want to {context['user_story']['action']}",
+                                private=github_config.get("private", False),
+                            )
+                    except Exception as e:
+                        if progress_callback:
+                            await progress_callback(
+                                "github_setup",
+                                "failed",
+                                {"name": f"Failed to create repository: {e}"},
+                            )
+                        return
+
+                # Set up git remote and push initial commit
+                try:
+                    await asyncio.to_thread(self._setup_github_remote_and_push, repo_url, token)
+                except subprocess.CalledProcessError as e:
+                    if progress_callback:
+                        await progress_callback(
+                            "github_setup",
+                            "failed",
+                            {"name": f"Failed to push to GitHub: {e}"},
+                        )
+                    return
+
+                # Create issues from product spec (unless YOLO mode which handles this differently)
+                if not github_config.get("yolo_mode", False):
+                    await self._create_github_issues(github, owner, repo_name, context)
+
+                if progress_callback:
+                    await progress_callback(
+                        "github_setup",
+                        "completed",
+                        {"name": "GitHub repository configured and issues created"},
+                    )
+
+        except (
+            requests.exceptions.RequestException,
+            subprocess.CalledProcessError,
+            ValueError,
+        ) as e:
+            logger = logging.getLogger(__name__)
+            logger.error("GitHub integration failed: %s", e, exc_info=True)
+            if progress_callback:
+                await progress_callback(
+                    "github_setup",
+                    "failed",
+                    {"name": "GitHub integration failed: check your network connection"},
+                )
+            # Don't fail the whole generation if GitHub integration fails
+            return
+
+    def _setup_github_remote_and_push(self, repo_url: str, token: str) -> None:
+        """Set up git remote and push initial commit.
+
+        Args:
+            repo_url: The repository URL to push to
+            token: GitHub personal access token for authentication
+        """
+        # Add or update remote
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=self.project_path,
+            capture_output=True,
+            check=False,
+            timeout=10,  # Fast operation, 10s is generous
+        )
+
+        if result.returncode == 0:
+            # Update existing remote
+            subprocess.run(
+                ["git", "remote", "set-url", "origin", repo_url],
+                cwd=self.project_path,
+                check=True,
+                timeout=10,
+            )
+        else:
+            # Add new remote
+            subprocess.run(
+                ["git", "remote", "add", "origin", repo_url],
+                cwd=self.project_path,
+                check=True,
+                timeout=10,
+            )
+
+        # Ensure we're on main branch before pushing
+        subprocess.run(
+            ["git", "checkout", "main"],
+            cwd=self.project_path,
+            check=True,
+            timeout=10,
+        )
+
+        # Set up environment for git authentication with token
+        # This avoids exposing the token in the URL or command line
+        env = os.environ.copy()
+        env["GIT_ASKPASS"] = "echo"  # Prevent interactive prompts
+        env["GIT_USERNAME"] = "x-access-token"  # GitHub convention for token auth
+        env["GIT_PASSWORD"] = token
+
+        # Push to GitHub (can be slow for large repos, so give it 5 minutes)
+        subprocess.run(
+            ["git", "push", "-u", "origin", "main"],
+            cwd=self.project_path,
+            check=True,
+            timeout=300,  # 5 minutes for large repos with slow networks
+            env=env,  # Pass environment with credentials
+        )
+
+    async def _create_github_issues(
+        self, github: GitHubService, owner: str, repo_name: str, context: dict[str, Any]
+    ) -> None:
+        """Create GitHub issues from the product specification."""
+        # Create an issue for each feature
+        for feature in context["features"]:
+            # Truncate title to reasonable length with ellipsis if needed
+            max_title_len = 80
+            if len(feature) > max_title_len:
+                issue_title = f"Implement: {feature[:max_title_len]}..."
+            else:
+                issue_title = f"Implement: {feature}"
+            issue_body = f"""## Feature Description
+{feature}
+
+## Context
+This feature is part of the project requirements:
+
+**User Story:**
+As {context["user_story"]["role"]}, I want to {context["user_story"]["action"]},
+so that {context["user_story"]["outcome"]}
+
+## Reference
+See the full product specification in `plan/product-spec.md` for architectural details.
+
+## Acceptance Criteria
+- [ ] Feature implementation matches the specification
+- [ ] Tests are written and passing
+- [ ] Documentation is updated
+"""
+
+            await asyncio.to_thread(
+                github.create_issue,
+                owner=owner,
+                repo=repo_name,
+                title=issue_title,
+                body=issue_body,
+                labels=["feature", "from-spec"],
+            )
