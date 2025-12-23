@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import os
 import subprocess
 import time
 from collections.abc import Callable, Coroutine
@@ -495,7 +496,7 @@ Generated with SpecInit
 
                 # Set up git remote and push initial commit
                 try:
-                    await asyncio.to_thread(self._setup_github_remote_and_push, repo_url)
+                    await asyncio.to_thread(self._setup_github_remote_and_push, repo_url, token)
                 except subprocess.CalledProcessError as e:
                     if progress_callback:
                         await progress_callback(
@@ -532,8 +533,13 @@ Generated with SpecInit
             # Don't fail the whole generation if GitHub integration fails
             return
 
-    def _setup_github_remote_and_push(self, repo_url: str) -> None:
-        """Set up git remote and push initial commit."""
+    def _setup_github_remote_and_push(self, repo_url: str, token: str) -> None:
+        """Set up git remote and push initial commit.
+
+        Args:
+            repo_url: The repository URL to push to
+            token: GitHub personal access token for authentication
+        """
         # Add or update remote
         result = subprocess.run(
             ["git", "remote", "get-url", "origin"],
@@ -568,12 +574,20 @@ Generated with SpecInit
             timeout=10,
         )
 
+        # Set up environment for git authentication with token
+        # This avoids exposing the token in the URL or command line
+        env = os.environ.copy()
+        env["GIT_ASKPASS"] = "echo"  # Prevent interactive prompts
+        env["GIT_USERNAME"] = "x-access-token"  # GitHub convention for token auth
+        env["GIT_PASSWORD"] = token
+
         # Push to GitHub (can be slow for large repos, so give it 5 minutes)
         subprocess.run(
             ["git", "push", "-u", "origin", "main"],
             cwd=self.project_path,
             check=True,
             timeout=300,  # 5 minutes for large repos with slow networks
+            env=env,  # Pass environment with credentials
         )
 
     async def _create_github_issues(
