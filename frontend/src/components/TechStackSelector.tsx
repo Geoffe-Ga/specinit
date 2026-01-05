@@ -32,6 +32,7 @@ export function TechStackSelector({ value, onChange, platforms }: TechStackSelec
         setSuggestions(results)
       }
     } catch (err) {
+      console.error('Failed to get tech stack suggestions:', err)
       if (isMountedRef.current) {
         setError('Failed to load suggestions. Please try again.')
         setSuggestions([])
@@ -43,9 +44,21 @@ export function TechStackSelector({ value, onChange, platforms }: TechStackSelec
   useEffect(() => {
     if (suggestionsEnabled && !showSuggestions && suggestions.length === 0 && !hasFetchedRef.current) {
       hasFetchedRef.current = true
-      handleGetSuggestions()
+      setShowSuggestions(true)
+      setError(null)
+      getSuggestions('tech_stack')
+        .then((results) => {
+          if (isMountedRef.current) setSuggestions(results)
+        })
+        .catch((err) => {
+          console.error('Failed to auto-trigger tech stack suggestions:', err)
+          if (isMountedRef.current) {
+            setError('Failed to load suggestions. Please try again.')
+            setSuggestions([])
+          }
+        })
     }
-  }, [suggestionsEnabled, showSuggestions, suggestions.length, handleGetSuggestions])
+  }, [suggestionsEnabled, showSuggestions, suggestions.length, getSuggestions])
 
   const handleAddSuggestion = useCallback((suggestion: string) => {
     // Check if suggestion already exists in any category (prevent cross-category duplicates)
@@ -93,6 +106,7 @@ export function TechStackSelector({ value, onChange, platforms }: TechStackSelec
         setSuggestions(results)
       }
     } catch (err) {
+      console.error('Failed to get more tech stack suggestions:', err)
       if (isMountedRef.current) {
         setError('Failed to load suggestions. Please try again.')
         setSuggestions([])
