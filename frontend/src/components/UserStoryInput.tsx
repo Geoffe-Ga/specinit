@@ -17,8 +17,8 @@ interface ParsedUserStory {
 }
 
 function parseUserStory(story: string): ParsedUserStory | null {
-  // More flexible regex that handles optional commas and alternate phrasings
-  const regex = /As\s+a\s+(.+?)[,;]?\s+I\s+want\s+to\s+(.+?)[,;]?\s+(?:so\s+that|to|in\s+order\s+to)\s+(.+)/i
+  // More flexible regex that handles optional commas, alternate phrasings, and articles (a/an/the)
+  const regex = /As\s+(?:a|an|the)\s+(.+?)[,;]?\s+I\s+want\s+to\s+(.+?)[,;]?\s+(?:so\s+that|to|in\s+order\s+to)\s+(.+)/i
   const match = story.match(regex)
 
   if (match) {
@@ -37,6 +37,7 @@ export function UserStoryInput({ value, onChange, errors }: UserStoryInputProps)
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
   const [showSuggestions, setShowSuggestions] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   // Reset selection when user manually edits fields
   useEffect(() => {
@@ -49,8 +50,14 @@ export function UserStoryInput({ value, onChange, errors }: UserStoryInputProps)
 
   const handleGetSuggestions = async () => {
     setShowSuggestions(true)
-    const results = await getSuggestions('user_stories')
-    setSuggestions(results)
+    setError(null)
+    try {
+      const results = await getSuggestions('user_stories')
+      setSuggestions(results)
+    } catch (err) {
+      setError('Failed to load suggestions. Please try again.')
+      setSuggestions([])
+    }
   }
 
   const handleUseSuggestion = () => {
@@ -71,12 +78,19 @@ export function UserStoryInput({ value, onChange, errors }: UserStoryInputProps)
   const handleSkip = () => {
     setShowSuggestions(false)
     setSelectedIndex(null)
+    setError(null)
   }
 
   const handleGetMore = async () => {
-    const results = await getSuggestions('user_stories')
-    setSuggestions(results)
-    setSelectedIndex(null)
+    setError(null)
+    try {
+      const results = await getSuggestions('user_stories')
+      setSuggestions(results)
+      setSelectedIndex(null)
+    } catch (err) {
+      setError('Failed to load suggestions. Please try again.')
+      setSuggestions([])
+    }
   }
 
   return (
@@ -105,8 +119,73 @@ export function UserStoryInput({ value, onChange, errors }: UserStoryInputProps)
         </button>
       )}
 
+      {/* Error State */}
+      {showSuggestions && error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-start gap-2">
+            <span className="text-red-600" aria-hidden="true">❌</span>
+            <div className="flex-1">
+              <p className="text-sm font-medium text-red-800">{error}</p>
+              <p className="text-xs text-red-600 mt-1">
+                Check your internet connection and API key configuration.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2 mt-3">
+            <button
+              type="button"
+              onClick={handleGetSuggestions}
+              disabled={isLoading}
+              className="py-2 px-4 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Retry loading suggestions"
+            >
+              {isLoading ? 'Loading...' : 'Try again'}
+            </button>
+            <button
+              type="button"
+              onClick={handleSkip}
+              className="py-2 px-4 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+              aria-label="Dismiss error and enter manually"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Empty Suggestions State */}
+      {showSuggestions && !error && !isLoading && suggestions.length === 0 && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <p className="text-sm text-yellow-800">
+            <span aria-hidden="true">💭</span> No suggestions available at this time.
+          </p>
+          <p className="text-xs text-yellow-600 mt-1">
+            Try providing more details in your project description, or enter your user story manually below.
+          </p>
+          <div className="flex gap-2 mt-3">
+            <button
+              type="button"
+              onClick={handleGetMore}
+              disabled={isLoading}
+              className="py-2 px-4 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Try getting suggestions again"
+            >
+              Try again
+            </button>
+            <button
+              type="button"
+              onClick={handleSkip}
+              className="py-2 px-4 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+              aria-label="Continue entering user story manually"
+            >
+              Continue manually
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Suggestions Display */}
-      {showSuggestions && suggestions.length > 0 && (
+      {showSuggestions && !error && suggestions.length > 0 && (
         <div
           className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3"
           onKeyDown={(e) => {
