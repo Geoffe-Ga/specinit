@@ -255,8 +255,23 @@ preferences:
 ```
 
 **Environment variables:**
-- `SPECINIT_API_KEY` - Anthropic API key (overrides keyring)
+- `SPECINIT_API_KEY` - Anthropic API key (highest priority)
+- `SPECINIT_API_KEY_FILE` - Path to file containing API key (overrides keyring, useful for secret managers)
 - `SPECINIT_CONFIG_DIR` - Custom config directory
+
+**Examples using secret managers:**
+
+```bash
+# Docker Secrets
+export SPECINIT_API_KEY_FILE=/run/secrets/anthropic_api_key
+
+# 1Password CLI
+export SPECINIT_API_KEY_FILE=<(op read "op://vault/Anthropic API Key/credential")
+
+# HashiCorp Vault
+vault kv get -field=api_key secret/specinit > /tmp/api_key.txt
+export SPECINIT_API_KEY_FILE=/tmp/api_key.txt
+```
 
 ---
 
