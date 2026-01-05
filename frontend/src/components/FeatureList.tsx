@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { X, Plus } from 'lucide-react'
 import { useSuggestionContext } from '../contexts/SuggestionContext'
 
@@ -16,13 +16,15 @@ export function FeatureList({ features, onChange, error }: FeatureListProps) {
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [selectedIndices, setSelectedIndices] = useState<number[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
+  const hasFetchedRef = useRef(false)
+  const isMountedRef = useRef(true)
 
-  // Auto-trigger suggestions when component mounts if enabled
+  // Cleanup on unmount
   useEffect(() => {
-    if (suggestionsEnabled && !showSuggestions && suggestions.length === 0) {
-      handleGetSuggestions()
+    return () => {
+      isMountedRef.current = false
     }
-  }, [suggestionsEnabled]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
 
   const addFeature = () => {
     if (features.length < MAX_FEATURES) {
@@ -43,12 +45,22 @@ export function FeatureList({ features, onChange, error }: FeatureListProps) {
     onChange(newFeatures)
   }
 
-  const handleGetSuggestions = async () => {
+  const handleGetSuggestions = useCallback(async () => {
     setShowSuggestions(true)
     const results = await getSuggestions('features')
-    setSuggestions(results)
-    setSelectedIndices([])
-  }
+    if (isMountedRef.current) {
+      setSuggestions(results)
+      setSelectedIndices([])
+    }
+  }, [getSuggestions])
+
+  // Auto-trigger suggestions when component mounts if enabled
+  useEffect(() => {
+    if (suggestionsEnabled && !showSuggestions && suggestions.length === 0 && !hasFetchedRef.current) {
+      hasFetchedRef.current = true
+      handleGetSuggestions()
+    }
+  }, [suggestionsEnabled, showSuggestions, suggestions.length, handleGetSuggestions])
 
   const toggleSelection = (index: number) => {
     setSelectedIndices((prev) =>
@@ -71,19 +83,51 @@ export function FeatureList({ features, onChange, error }: FeatureListProps) {
     setSelectedIndices([])
   }
 
-  const handleGetMore = async () => {
+  const handleGetMore = useCallback(async () => {
     const results = await getSuggestions('features')
-    setSuggestions(results)
-    setSelectedIndices([])
-  }
+    if (isMountedRef.current) {
+      setSuggestions(results)
+      setSelectedIndices([])
+    }
+  }, [getSuggestions])
 
   return (
     <div className="space-y-4">
+      {/* Loading State */}
+      {suggestionsEnabled && showSuggestions && isLoading && suggestions.length === 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-center justify-center gap-2 text-blue-700">
+            <span className="animate-spin" aria-hidden="true">🔄</span>
+            <span>Generating feature suggestions...</span>
+          </div>
+        </div>
+      )}
+
+      {/* Empty Suggestions State */}
+      {suggestionsEnabled && showSuggestions && !isLoading && suggestions.length === 0 && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <p className="text-sm text-yellow-800">
+            <span aria-hidden="true">⚠️</span> No suggestions available at this time.
+          </p>
+          <p className="text-xs text-yellow-600 mt-1">
+            Please try again or add your features manually below.
+          </p>
+          <button
+            type="button"
+            onClick={handleSkipAll}
+            className="mt-2 py-2 px-4 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+          >
+            Continue manually
+          </button>
+        </div>
+      )}
+
       {/* Suggestions Display */}
-      {suggestionsEnabled && showSuggestions && suggestions.length > 0 && (
+      {suggestionsEnabled && showSuggestions && !isLoading && suggestions.length > 0 && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
           <p className="text-sm font-medium text-blue-900">
-            💡 Suggested features (based on your user story):
+            <span className="sr-only">Suggested features based on your user story</span>
+            <span aria-hidden="true">💡</span> Suggested features (based on your user story):
           </p>
 
           <div className="space-y-2">
@@ -101,6 +145,7 @@ export function FeatureList({ features, onChange, error }: FeatureListProps) {
                   checked={selectedIndices.includes(index)}
                   onChange={() => toggleSelection(index)}
                   className="mt-0.5"
+                  aria-label={`Select feature: ${suggestion}`}
                 />
                 <span className="text-sm text-gray-900 flex-1">{suggestion}</span>
               </label>
@@ -113,16 +158,25 @@ export function FeatureList({ features, onChange, error }: FeatureListProps) {
               onClick={handleAddSelected}
               disabled={selectedIndices.length === 0 || isLoading}
               className="flex-1 py-2 px-4 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+              aria-label={`Add ${selectedIndices.length} selected features`}
             >
-              ✓ Add selected ({selectedIndices.length})
+              {isLoading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="animate-spin" aria-hidden="true">🔄</span>
+                  <span>Loading...</span>
+                </span>
+              ) : (
+                `✓ Add selected (${selectedIndices.length})`
+              )}
             </button>
             <button
               type="button"
               onClick={handleGetMore}
               disabled={isLoading}
               className="py-2 px-4 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Get more feature suggestions"
             >
-              Get more
+              {isLoading ? 'Loading...' : 'Get more'}
             </button>
             <button
               type="button"
