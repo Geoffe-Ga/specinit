@@ -1,7 +1,8 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 
+import { useSuggestionContext } from '../contexts/SuggestionContext'
 import { projectSchema, type ProjectFormData } from '../schemas/projectSchema'
 import type { ProjectConfig } from '../types'
 
@@ -112,6 +113,7 @@ function StepRenderer({ step, values, errors, register, setValue }: StepRenderer
 
 export function ProjectForm({ onSubmit }: ProjectFormProps) {
   const [step, setStep] = useState(1)
+  const { updateContext, setSuggestionsEnabled } = useSuggestionContext()
 
   const {
     register,
@@ -125,6 +127,23 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
   })
 
   const currentValues = watch()
+
+  // Update suggestion context whenever form values change
+  useEffect(() => {
+    updateContext('projectName', currentValues.name)
+    updateContext('projectDescription', currentValues.projectDescription)
+    updateContext('platforms', currentValues.platforms)
+    updateContext('userStory', currentValues.userStory)
+    updateContext('features', currentValues.features)
+    updateContext('techStack', currentValues.techStack)
+    updateContext('aesthetics', currentValues.aesthetics)
+    updateContext('additionalContext', currentValues.additionalContext)
+  }, [currentValues, updateContext])
+
+  // Update suggestions enabled state
+  useEffect(() => {
+    setSuggestionsEnabled(currentValues.enableSuggestions ?? false)
+  }, [currentValues.enableSuggestions, setSuggestionsEnabled])
 
   const handleFormSubmit = (data: ProjectFormData) => {
     onSubmit(data)
