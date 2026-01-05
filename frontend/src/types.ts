@@ -21,6 +21,7 @@ export interface GitHubConfig {
 
 export interface ProjectConfig {
   name: string
+  projectDescription?: string
   platforms: string[]
   userStory: UserStory
   features: string[]

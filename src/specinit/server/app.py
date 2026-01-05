@@ -70,6 +70,7 @@ class ProjectConfig(BaseModel):
     """Project configuration from form submission."""
 
     name: str
+    project_description: str | None = Field(None, max_length=500)
     platforms: list[str]
     user_story: dict[str, str]  # role, action, outcome
     features: list[str]

@@ -12,6 +12,10 @@ import type { ProjectConfig } from '../types'
 
 const projectSchema = z.object({
   name: z.string().min(1, 'Project name is required').max(50),
+  projectDescription: z
+    .string()
+    .max(500, 'Project description must be less than 500 characters')
+    .optional(),
   platforms: z.array(z.string()).min(1, 'Select at least one platform'),
   userStory: z.object({
     role: z.string().min(3, 'Role must be at least 3 characters'),
@@ -68,6 +72,7 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
     resolver: zodResolver(projectSchema),
     defaultValues: {
       name: '',
+      projectDescription: '',
       platforms: [],
       userStory: { role: '', action: '', outcome: '' },
       features: [''],
@@ -138,6 +143,30 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
             />
             {errors.name && (
               <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>
+            )}
+          </div>
+
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              What are you building? <span className="text-gray-500 font-normal">(Optional)</span>
+            </label>
+            <textarea
+              {...register('projectDescription')}
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+              placeholder="e.g., A mobile app for tracking daily research notes and progress"
+              maxLength={500}
+            />
+            <div className="flex justify-between items-start mt-1">
+              <p className="text-sm text-gray-500">
+                Provide a brief description of your project idea. This will help us suggest relevant user stories and features.
+              </p>
+              <p className="text-xs text-gray-400 ml-2 whitespace-nowrap">
+                {currentValues.projectDescription?.length || 0}/500
+              </p>
+            </div>
+            {errors.projectDescription && (
+              <p className="mt-1 text-sm text-red-600">{errors.projectDescription.message}</p>
             )}
           </div>
 
