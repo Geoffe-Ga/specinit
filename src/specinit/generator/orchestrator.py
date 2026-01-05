@@ -5,7 +5,7 @@ import logging
 import subprocess
 import time
 from collections.abc import Callable, Coroutine
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any, ClassVar, cast
 from urllib.parse import urlparse
 
@@ -143,24 +143,166 @@ class GenerationOrchestrator:
             self.history.update_project(project_id, status="failed")
             raise
 
+    def _read_previous_step_outputs(self) -> dict[str, str]:
+        """Read all generated files from previous steps.
+
+        Returns:
+            Dictionary mapping relative file paths to their content.
+        """
+        outputs: dict[str, str] = {}
+        max_file_size = 50_000  # 50KB limit per file
+
+        # Directories and cache folders to skip
+        skip_dirs = {
+            ".git",
+            "__pycache__",
+            "node_modules",
+            "dist",
+            "build",
+            ".venv",
+            "venv",
+            ".pytest_cache",
+            ".mypy_cache",
+            ".ruff_cache",
+            ".tox",
+            ".nox",
+        }
+
+        for path in self.project_path.rglob("*"):
+            if not path.is_file():
+                continue
+
+            # Skip if any part of the path is in skip_dirs
+            if any(part in skip_dirs for part in path.parts):
+                continue
+
+            try:
+                rel_path = path.relative_to(self.project_path)
+                content = path.read_text(encoding="utf-8")
+
+                # Truncate large files
+                if len(content) > max_file_size:
+                    content = content[:max_file_size] + "\n\n[Truncated - file too large]"
+
+                outputs[str(rel_path)] = content
+            except (UnicodeDecodeError, OSError) as e:
+                # Skip binary files and files that can't be read
+                logger = logging.getLogger(__name__)
+                logger.debug(f"Skipping file {path}: {e}")
+                continue
+
+        # Log context size metrics for debugging
+        total_size = sum(len(content) for content in outputs.values())
+        logger = logging.getLogger(__name__)
+        logger.debug(
+            f"Read {len(outputs)} files from previous steps (total size: {total_size:,} bytes)"
+        )
+
+        return outputs
+
+    def _build_step_context(self, step_id: str, base_context: dict[str, Any]) -> dict[str, Any]:
+        """Build context for a step, including outputs from previous steps.
+
+        Implements step-specific context filtering to prevent context explosion.
+        Each step only receives outputs from relevant previous steps.
+
+        Args:
+            step_id: The current step identifier
+            base_context: The base context from generate()
+
+        Returns:
+            Context dictionary with previous_outputs added (if not first step)
+        """
+        # Copy base context
+        step_context = dict(base_context)
+
+        # Define which file patterns each step needs from previous steps
+        # This prevents context explosion by limiting what gets passed to Claude API
+        #
+        # Steps with empty patterns ([]) either:
+        # - Are first in the sequence (product_spec)
+        # - Are local-only operations that don't call Claude API (validation, git_init)
+        #
+        # Note: dependencies step was changed to local-only in latest refactor,
+        # but kept file patterns in case it needs Claude API calls in future.
+        step_file_patterns: dict[str, list[str]] = {
+            "product_spec": [],  # First step, no previous outputs needed
+            "structure": ["plan/*.md"],  # Needs product spec to create directory structure
+            "documentation": [
+                "plan/*.md",  # Product spec for context
+                "src/**/*",  # Generated structure to document
+                "**/package.json",  # Project config
+                "**/pyproject.toml",  # Project config
+                "**/Cargo.toml",  # Project config
+            ],
+            "tooling": [
+                "plan/*.md",  # Product spec for tech stack requirements
+                "src/**/*",  # Structure to configure tools for
+                "**/package.json",  # Dependencies for tool config
+                "**/pyproject.toml",  # Dependencies for tool config
+            ],
+            "validation": [],  # Local-only: validates structure without API calls
+            "dependencies": [
+                "plan/*.md",  # Product spec for tech stack
+                "src/**/*",  # Structure to understand dependencies
+            ],
+            "git_init": [],  # Local-only: initializes git repository without API calls
+            "demo_code": [
+                "plan/*.md",  # Product spec for feature requirements
+                "src/**/*",  # All structure files
+                "*.md",  # Documentation (README, CONTRIBUTING, CLAUDE.md)
+                ".*rc*",  # Tool configs (.eslintrc, .prettierrc, etc.)
+                "**/.*.json",  # Config files (.eslintrc.json, etc.)
+                "**/package.json",  # Dependencies to use in demo code
+                "**/pyproject.toml",  # Dependencies to use in demo code
+                "**/Cargo.toml",  # Dependencies to use in demo code
+            ],
+        }
+
+        # Get patterns for this step
+        patterns = step_file_patterns.get(step_id, [])
+
+        # If no patterns (first step or local-only steps), no previous outputs
+        if not patterns:
+            return step_context
+
+        # Read all previous outputs
+        all_outputs = self._read_previous_step_outputs()
+
+        # Filter to only matching patterns
+        # Use PurePath.match() instead of fnmatch for correct ** globstar handling
+        filtered_outputs = {}
+        for file_path, content in all_outputs.items():
+            for pattern in patterns:
+                if PurePath(file_path).match(pattern):
+                    filtered_outputs[file_path] = content
+                    break
+
+        step_context["previous_outputs"] = filtered_outputs
+
+        return step_context
+
     async def _execute_step(self, step_id: str, context: dict[str, Any]) -> None:
-        """Execute a single generation step."""
+        """Execute a single generation step with accumulated context."""
+        # Build step-specific context with previous outputs
+        step_context = self._build_step_context(step_id, context)
+
         if step_id == "product_spec":
-            await self._generate_product_spec(context)
+            await self._generate_product_spec(step_context)
         elif step_id == "structure":
-            await self._create_structure(context)
+            await self._create_structure(step_context)
         elif step_id == "documentation":
-            await self._generate_documentation(context)
+            await self._generate_documentation(step_context)
         elif step_id == "tooling":
-            await self._configure_tooling(context)
+            await self._configure_tooling(step_context)
         elif step_id == "validation":
-            await self._validate_project(context)
+            await self._validate_project(step_context)
         elif step_id == "dependencies":
-            await self._setup_dependencies(context)
+            await self._setup_dependencies(step_context)
         elif step_id == "git_init":
-            await self._init_git(context)
+            await self._init_git(step_context)
         elif step_id == "demo_code":
-            await self._generate_demo_code(context)
+            await self._generate_demo_code(step_context)
 
     async def _call_claude(self, prompt: str, step_id: str) -> str:
         """Make a Claude API call and track costs."""

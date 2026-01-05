@@ -22,6 +22,34 @@ All planning and specification documents should be saved in the /plan/ directory
 - progress-notes.md - Development progress tracking
 - audit-log.md - Quality and compliance audits"""
 
+    def _format_previous_outputs(self, context: dict[str, Any]) -> str:
+        """Format previous outputs for inclusion in prompts.
+
+        Args:
+            context: Context dictionary that may contain previous_outputs
+
+        Returns:
+            Formatted string of previous outputs, or empty string if none
+        """
+        previous_outputs = context.get("previous_outputs", {})
+        if not previous_outputs:
+            return ""
+
+        # Format outputs into a readable section
+        formatted_files = []
+        for file_path, content in sorted(previous_outputs.items()):
+            formatted_files.append(f"--- FILE: {file_path} ---\n{content}\n")
+
+        files_text = "\n".join(formatted_files)
+        return f"""
+# Previous Step Outputs
+
+The following files have been generated in previous steps. Use this content to inform your generation:
+
+{files_text}
+---
+"""
+
     def build_product_spec_prompt(self, context: dict[str, Any]) -> str:
         """Build prompt for Step 1: Product Specification."""
         user_story = context["user_story"]
@@ -38,6 +66,8 @@ All planning and specification documents should be saved in the /plan/ directory
 ## Additional Context
 {additional_context}"""
 
+        features_text = "\n".join(f"- {f}" for f in features)
+
         return f"""{self.BASE_SYSTEM}
 
 # Context
@@ -53,7 +83,7 @@ The user wants to create a new software project with these requirements:
 As {user_story["role"]}, I want to {user_story["action"]}, so that {user_story["outcome"]}
 
 ## Features
-{chr(10).join(f"- {f}" for f in features)}
+{features_text}
 
 ## Tech Stack
 - Frontend: {", ".join(tech_stack.get("frontend", ["N/A"]))}
@@ -92,9 +122,10 @@ Output ONLY the markdown content, no additional commentary."""
     def build_structure_prompt(self, context: dict[str, Any]) -> str:
         """Build prompt for Step 2: Project Structure."""
         template = context["template"]
+        previous_outputs_section = self._format_previous_outputs(context)
 
         return f"""{self.BASE_SYSTEM}
-
+{previous_outputs_section}
 # Context
 Create the project structure for: {context["project_name"]}
 
@@ -130,9 +161,10 @@ No markdown code blocks, just the raw script."""
         Note: README.md is generated later (after demo code) to reflect actual implementation.
         """
         user_story = context["user_story"]
+        previous_outputs_section = self._format_previous_outputs(context)
 
         return f"""{self.BASE_SYSTEM}
-
+{previous_outputs_section}
 # Context
 Project: {context["project_name"]}
 User Story: As {user_story["role"]}, I want to {user_story["action"]}, so that {user_story["outcome"]}
@@ -200,9 +232,10 @@ Do NOT include README.md - it will be generated later."""
             + tech_stack.get("backend", [])
             + tech_stack.get("tools", [])
         )
+        previous_outputs_section = self._format_previous_outputs(context)
 
         return f"""{self.BASE_SYSTEM}
-
+{previous_outputs_section}
 # Context
 Project: {context["project_name"]}
 Tech Stack: {", ".join(all_tech)}
@@ -328,6 +361,7 @@ Output ONLY the file contents in this format, no additional commentary."""
     def build_demo_code_prompt(self, context: dict[str, Any], spec_content: str) -> str:
         """Build prompt for Step 8: Demo Code."""
         additional_context = context.get("additional_context")
+        previous_outputs_section = self._format_previous_outputs(context)
 
         additional_context_section = ""
         if additional_context:
@@ -337,7 +371,7 @@ Output ONLY the file contents in this format, no additional commentary."""
 {additional_context}"""
 
         return f"""{self.BASE_SYSTEM}
-
+{previous_outputs_section}
 # Context
 Project: {context["project_name"]}
 Features: {", ".join(context["features"])}
