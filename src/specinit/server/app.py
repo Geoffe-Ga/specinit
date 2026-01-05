@@ -253,6 +253,7 @@ async def generate_project(websocket: WebSocket) -> None:
             tech_stack=project_config.tech_stack,
             aesthetics=project_config.aesthetics,
             additional_context=project_config.additional_context,
+            github_config=project_config.github.model_dump() if project_config.github else None,
             progress_callback=send_progress,
         )
 
