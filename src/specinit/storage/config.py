@@ -1,7 +1,9 @@
 """Configuration management for SpecInit."""
 
 import contextlib
+import logging
 import os
+import stat
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -76,13 +78,47 @@ class ConfigManager:
         return result
 
     def get_api_key(self) -> str | None:
-        """Get the API key from secure storage or environment."""
-        # Check environment variable first
+        """Get the API key from secure storage, file, or environment.
+
+        Priority (highest to lowest):
+        1. SPECINIT_API_KEY environment variable
+        2. SPECINIT_API_KEY_FILE environment variable (file path)
+        3. System keyring
+
+        Returns:
+            The API key if found, None otherwise
+        """
+        logger = logging.getLogger(__name__)
+
+        # 1. Check environment variable first
         env_key = os.environ.get("SPECINIT_API_KEY")
         if env_key:
             return env_key
 
-        # Try keyring
+        # 2. Check file-based key
+        key_file_path = os.environ.get("SPECINIT_API_KEY_FILE")
+        if key_file_path:
+            try:
+                key_path = Path(key_file_path)
+                if key_path.exists():
+                    # Check file permissions - warn if too permissive
+                    file_stat = key_path.stat()
+                    file_mode = stat.S_IMODE(file_stat.st_mode)
+                    if file_mode & (stat.S_IRWXG | stat.S_IRWXO):
+                        logger.warning(
+                            f"API key file {key_file_path} has overly permissive permissions "
+                            f"({oct(file_mode)}). Consider setting to 0o600 (user read/write only)."
+                        )
+
+                    # Read and return the key
+                    api_key = key_path.read_text().strip()
+                    if api_key:
+                        return api_key
+            except (OSError, PermissionError, UnicodeDecodeError) as e:
+                logger.warning(f"Failed to read API key from file {key_file_path}: {e}")
+                return None
+
+        # 3. Try keyring
         try:
             return keyring.get_password(SPECINIT_SERVICE, "api_key")
         except Exception:

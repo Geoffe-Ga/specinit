@@ -1,5 +1,6 @@
 """Tests for configuration management."""
 
+import logging
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -125,3 +126,131 @@ class TestConfigManager:
         config = ConfigManager()
 
         assert config.get_api_key() == "stored-key"
+
+    @patch("specinit.storage.config.keyring")
+    def test_api_key_from_file(
+        self,
+        mock_keyring: MagicMock,
+        mock_home: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """API key should be read from file specified by SPECINIT_API_KEY_FILE."""
+        # Clear env and keyring
+        monkeypatch.delenv("SPECINIT_API_KEY", raising=False)
+        mock_keyring.get_password.return_value = None
+
+        # Create a key file
+        key_file = mock_home / "api_key.txt"
+        key_file.write_text("file-based-key")
+
+        # Set environment variable to point to the file
+        monkeypatch.setenv("SPECINIT_API_KEY_FILE", str(key_file))
+
+        config = ConfigManager()
+        assert config.get_api_key() == "file-based-key"
+
+    @patch("specinit.storage.config.keyring")
+    def test_api_key_from_file_strips_whitespace(
+        self,
+        mock_keyring: MagicMock,
+        mock_home: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """API key from file should strip leading/trailing whitespace."""
+        monkeypatch.delenv("SPECINIT_API_KEY", raising=False)
+        mock_keyring.get_password.return_value = None
+
+        # Create key file with whitespace
+        key_file = mock_home / "api_key.txt"
+        key_file.write_text("  file-key-with-spaces  \n")
+
+        monkeypatch.setenv("SPECINIT_API_KEY_FILE", str(key_file))
+
+        config = ConfigManager()
+        assert config.get_api_key() == "file-key-with-spaces"
+
+    @patch("specinit.storage.config.keyring")
+    def test_api_key_from_nonexistent_file_returns_none(
+        self,
+        mock_keyring: MagicMock,
+        mock_home: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Should return None if API key file doesn't exist."""
+        monkeypatch.delenv("SPECINIT_API_KEY", raising=False)
+        mock_keyring.get_password.return_value = None
+
+        # Point to non-existent file
+        monkeypatch.setenv("SPECINIT_API_KEY_FILE", str(mock_home / "nonexistent.txt"))
+
+        config = ConfigManager()
+        assert config.get_api_key() is None
+
+    @patch("specinit.storage.config.keyring")
+    def test_api_key_priority_env_over_file(
+        self,
+        mock_keyring: MagicMock,
+        mock_home: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """SPECINIT_API_KEY environment variable should take precedence over file."""
+        mock_keyring.get_password.return_value = None
+
+        # Create key file
+        key_file = mock_home / "api_key.txt"
+        key_file.write_text("file-key")
+
+        # Set both environment variables
+        monkeypatch.setenv("SPECINIT_API_KEY", "env-key")
+        monkeypatch.setenv("SPECINIT_API_KEY_FILE", str(key_file))
+
+        config = ConfigManager()
+        # Env var should take precedence
+        assert config.get_api_key() == "env-key"
+
+    @patch("specinit.storage.config.keyring")
+    def test_api_key_priority_file_over_keyring(
+        self,
+        mock_keyring: MagicMock,
+        mock_home: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """File-based key should take precedence over keyring."""
+        monkeypatch.delenv("SPECINIT_API_KEY", raising=False)
+        mock_keyring.get_password.return_value = "keyring-key"
+
+        # Create key file
+        key_file = mock_home / "api_key.txt"
+        key_file.write_text("file-key")
+
+        monkeypatch.setenv("SPECINIT_API_KEY_FILE", str(key_file))
+
+        config = ConfigManager()
+        # File should take precedence over keyring
+        assert config.get_api_key() == "file-key"
+
+    @patch("specinit.storage.config.keyring")
+    def test_api_key_from_file_with_restrictive_permissions_warning(
+        self,
+        mock_keyring: MagicMock,
+        mock_home: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Should warn if API key file has overly permissive permissions."""
+        monkeypatch.delenv("SPECINIT_API_KEY", raising=False)
+        mock_keyring.get_password.return_value = None
+
+        # Create key file with world-readable permissions
+        key_file = mock_home / "api_key.txt"
+        key_file.write_text("file-key")
+        key_file.chmod(0o644)  # World-readable
+
+        monkeypatch.setenv("SPECINIT_API_KEY_FILE", str(key_file))
+
+        with caplog.at_level(logging.WARNING):
+            config = ConfigManager()
+            _ = config.get_api_key()
+
+        # Should warn about permissions
+        assert any("permissions" in record.message.lower() for record in caplog.records)
