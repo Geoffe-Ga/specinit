@@ -557,3 +557,99 @@ class TestAdditionalContext:
                 response = websocket.receive_json()
                 # Should not error - should process successfully
                 assert response["type"] in ["progress", "complete"]
+
+
+class TestProjectDescription:
+    """Tests for project_description field (Issue #35)."""
+
+    def test_project_config_accepts_project_description(self):
+        """ProjectConfig should accept optional project_description field."""
+        config = ProjectConfig(
+            name="test-project",
+            project_description="A mobile app for tracking daily research notes",
+            platforms=["web"],
+            user_story={
+                "role": "developer",
+                "action": "build apps",
+                "outcome": "save time",
+            },
+            features=["Feature 1"],
+            tech_stack={
+                "frontend": ["React"],
+                "backend": ["FastAPI"],
+                "database": [],
+                "tools": [],
+            },
+            aesthetics=["minimalist"],
+        )
+        assert config.project_description == "A mobile app for tracking daily research notes"
+
+    def test_project_config_project_description_is_optional(self):
+        """ProjectConfig should work without project_description field."""
+        config = ProjectConfig(
+            name="test-project",
+            platforms=["web"],
+            user_story={
+                "role": "developer",
+                "action": "build apps",
+                "outcome": "save time",
+            },
+            features=["Feature 1"],
+            tech_stack={
+                "frontend": ["React"],
+                "backend": ["FastAPI"],
+                "database": [],
+                "tools": [],
+            },
+            aesthetics=["minimalist"],
+        )
+        assert config.project_description is None
+
+    def test_rejects_project_description_exceeding_500_chars(self):
+        """ProjectConfig should reject project_description exceeding 500 characters."""
+        long_description = "a" * 501
+
+        with pytest.raises(ValidationError) as exc_info:
+            ProjectConfig(
+                name="test-project",
+                project_description=long_description,
+                platforms=["web"],
+                user_story={
+                    "role": "developer",
+                    "action": "build apps",
+                    "outcome": "save time",
+                },
+                features=["Feature 1"],
+                tech_stack={
+                    "frontend": ["React"],
+                    "backend": ["FastAPI"],
+                    "database": [],
+                    "tools": [],
+                },
+                aesthetics=["minimalist"],
+            )
+        assert "500" in str(exc_info.value).lower()
+
+    def test_accepts_project_description_exactly_500_chars(self):
+        """ProjectConfig should accept project_description at exactly 500 characters."""
+        max_length_description = "a" * 500
+
+        config = ProjectConfig(
+            name="test-project",
+            project_description=max_length_description,
+            platforms=["web"],
+            user_story={
+                "role": "developer",
+                "action": "build apps",
+                "outcome": "save time",
+            },
+            features=["Feature 1"],
+            tech_stack={
+                "frontend": ["React"],
+                "backend": ["FastAPI"],
+                "database": [],
+                "tools": [],
+            },
+            aesthetics=["minimalist"],
+        )
+        assert len(config.project_description) == 500

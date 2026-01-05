@@ -70,6 +70,9 @@ class ProjectConfig(BaseModel):
     """Project configuration from form submission."""
 
     name: str
+    # NOTE: project_description is collected here but not yet passed to GenerationOrchestrator.
+    # It will be used for auto-suggestions in Issue #39. Currently stored for future use.
+    project_description: str | None = Field(None, max_length=500)
     platforms: list[str]
     user_story: dict[str, str]  # role, action, outcome
     features: list[str]
