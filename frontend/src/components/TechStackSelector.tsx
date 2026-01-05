@@ -88,8 +88,15 @@ export function TechStackSelector({ value, onChange, platforms }: TechStackSelec
   }, [suggestionsEnabled, showSuggestions, suggestions.length, handleGetSuggestions])
 
   const handleAddSuggestion = useCallback((suggestion: string) => {
+    // Check if suggestion already exists in any category (prevent cross-category duplicates)
+    const alreadyExists = Object.values(value).some((categoryArray) =>
+      categoryArray.includes(suggestion)
+    )
+    if (alreadyExists) return
+
     // Try to categorize the suggestion based on TECH_OPTIONS
-    // Use escaped regex for precise matching (handles special chars like . in Next.js)
+    // Categorization uses substring matching: if suggestion contains a known tech name,
+    // it's added to that tech's category (e.g., "React Router" → frontend if "React" is in frontend list)
     let category: keyof TechStack | null = null
 
     for (const [cat, options] of Object.entries(TECH_OPTIONS)) {
@@ -109,10 +116,8 @@ export function TechStackSelector({ value, onChange, platforms }: TechStackSelec
     // Default to tools if we can't categorize
     if (!category) category = 'tools'
 
-    // Add to appropriate category if not already there
-    if (!value[category].includes(suggestion)) {
-      onChange({ ...value, [category]: [...value[category], suggestion] })
-    }
+    // Add to appropriate category
+    onChange({ ...value, [category]: [...value[category], suggestion] })
   }, [value, onChange])
 
   const handleSkipAll = () => {
@@ -205,6 +210,7 @@ export function TechStackSelector({ value, onChange, platforms }: TechStackSelec
             type="button"
             onClick={handleSkipAll}
             className="mt-2 py-2 px-4 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+            aria-label="Skip suggestions and continue choosing technologies manually"
           >
             Continue manually
           </button>
