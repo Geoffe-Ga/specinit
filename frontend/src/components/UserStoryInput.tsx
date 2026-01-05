@@ -40,6 +40,13 @@ export function UserStoryInput({ value, onChange, errors }: UserStoryInputProps)
   const [error, setError] = useState<string | null>(null)
   const abortControllerRef = useRef<AbortController>()
 
+  // Cleanup: abort pending requests on unmount
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort()
+    }
+  }, [])
+
   // Reset selection when user manually edits fields
   useEffect(() => {
     setSelectedIndex(null)
