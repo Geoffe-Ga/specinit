@@ -1,5 +1,7 @@
 """Tests for generation orchestrator context accumulation."""
 
+import contextlib
+import stat
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -217,3 +219,31 @@ class TestContextAccumulation:
 
         assert isinstance(outputs, dict)
         assert len(outputs) == 0
+
+    def test_read_previous_step_outputs_handles_permission_errors(self, orchestrator):
+        """Should skip files that can't be read due to permission errors."""
+        # Create a directory with files
+        (orchestrator.project_path / "plan").mkdir(parents=True, exist_ok=True)
+
+        # Create a readable file
+        readable_file = orchestrator.project_path / "plan" / "readable.md"
+        readable_file.write_text("This file can be read")
+
+        # Create a file and make it unreadable (permission 000)
+        unreadable_file = orchestrator.project_path / "plan" / "unreadable.md"
+        unreadable_file.write_text("This file will be unreadable")
+        unreadable_file.chmod(0o000)
+
+        try:
+            outputs = orchestrator._read_previous_step_outputs()
+
+            # Should include the readable file
+            assert "plan/readable.md" in outputs
+            assert "This file can be read" in outputs["plan/readable.md"]
+
+            # Should skip the unreadable file without crashing
+            assert "plan/unreadable.md" not in outputs
+        finally:
+            # Clean up: restore permissions so temp_dir cleanup can delete it
+            with contextlib.suppress(OSError):
+                unreadable_file.chmod(stat.S_IRUSR | stat.S_IWUSR)

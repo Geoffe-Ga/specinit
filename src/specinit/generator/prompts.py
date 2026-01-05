@@ -40,12 +40,13 @@ All planning and specification documents should be saved in the /plan/ directory
         for file_path, content in sorted(previous_outputs.items()):
             formatted_files.append(f"--- FILE: {file_path} ---\n{content}\n")
 
+        files_text = "\n".join(formatted_files)
         return f"""
 # Previous Step Outputs
 
 The following files have been generated in previous steps. Use this content to inform your generation:
 
-{chr(10).join(formatted_files)}
+{files_text}
 ---
 """
 
@@ -65,6 +66,8 @@ The following files have been generated in previous steps. Use this content to i
 ## Additional Context
 {additional_context}"""
 
+        features_text = "\n".join(f"- {f}" for f in features)
+
         return f"""{self.BASE_SYSTEM}
 
 # Context
@@ -80,7 +83,7 @@ The user wants to create a new software project with these requirements:
 As {user_story["role"]}, I want to {user_story["action"]}, so that {user_story["outcome"]}
 
 ## Features
-{chr(10).join(f"- {f}" for f in features)}
+{features_text}
 
 ## Tech Stack
 - Frontend: {", ".join(tech_stack.get("frontend", ["N/A"]))}

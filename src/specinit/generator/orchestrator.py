@@ -5,6 +5,7 @@ import logging
 import subprocess
 import time
 from collections.abc import Callable, Coroutine
+from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any, ClassVar, cast
 from urllib.parse import urlparse
@@ -196,6 +197,9 @@ class GenerationOrchestrator:
     def _build_step_context(self, step_id: str, base_context: dict[str, Any]) -> dict[str, Any]:
         """Build context for a step, including outputs from previous steps.
 
+        Implements step-specific context filtering to prevent context explosion.
+        Each step only receives outputs from relevant previous steps.
+
         Args:
             step_id: The current step identifier
             base_context: The base context from generate()
@@ -206,12 +210,68 @@ class GenerationOrchestrator:
         # Copy base context
         step_context = dict(base_context)
 
-        # For the first step, don't include previous outputs
-        if step_id == "product_spec":
+        # Define which file patterns each step needs from previous steps
+        # This prevents context explosion by limiting what gets passed to Claude API
+        #
+        # Steps with empty patterns ([]) either:
+        # - Are first in the sequence (product_spec)
+        # - Are local-only operations that don't call Claude API (validation, git_init)
+        #
+        # Note: dependencies step was changed to local-only in latest refactor,
+        # but kept file patterns in case it needs Claude API calls in future.
+        step_file_patterns: dict[str, list[str]] = {
+            "product_spec": [],  # First step, no previous outputs needed
+            "structure": ["plan/*.md"],  # Needs product spec to create directory structure
+            "documentation": [
+                "plan/*.md",  # Product spec for context
+                "src/**/*",  # Generated structure to document
+                "**/package.json",  # Project config
+                "**/pyproject.toml",  # Project config
+                "**/Cargo.toml",  # Project config
+            ],
+            "tooling": [
+                "plan/*.md",  # Product spec for tech stack requirements
+                "src/**/*",  # Structure to configure tools for
+                "**/package.json",  # Dependencies for tool config
+                "**/pyproject.toml",  # Dependencies for tool config
+            ],
+            "validation": [],  # Local-only: validates structure without API calls
+            "dependencies": [
+                "plan/*.md",  # Product spec for tech stack
+                "src/**/*",  # Structure to understand dependencies
+            ],
+            "git_init": [],  # Local-only: initializes git repository without API calls
+            "demo_code": [
+                "plan/*.md",  # Product spec for feature requirements
+                "src/**/*",  # All structure files
+                "*.md",  # Documentation (README, CONTRIBUTING, CLAUDE.md)
+                ".*rc*",  # Tool configs (.eslintrc, .prettierrc, etc.)
+                "**/.*.json",  # Config files (.eslintrc.json, etc.)
+                "**/package.json",  # Dependencies to use in demo code
+                "**/pyproject.toml",  # Dependencies to use in demo code
+                "**/Cargo.toml",  # Dependencies to use in demo code
+            ],
+        }
+
+        # Get patterns for this step
+        patterns = step_file_patterns.get(step_id, [])
+
+        # If no patterns (first step or local-only steps), no previous outputs
+        if not patterns:
             return step_context
 
-        # For all other steps, include previous outputs
-        step_context["previous_outputs"] = self._read_previous_step_outputs()
+        # Read all previous outputs
+        all_outputs = self._read_previous_step_outputs()
+
+        # Filter to only matching patterns
+        filtered_outputs = {}
+        for file_path, content in all_outputs.items():
+            for pattern in patterns:
+                if fnmatch(file_path, pattern):
+                    filtered_outputs[file_path] = content
+                    break
+
+        step_context["previous_outputs"] = filtered_outputs
 
         return step_context
 
