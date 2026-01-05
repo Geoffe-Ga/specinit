@@ -5,8 +5,7 @@ import logging
 import subprocess
 import time
 from collections.abc import Callable, Coroutine
-from fnmatch import fnmatch
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any, ClassVar, cast
 from urllib.parse import urlparse
 
@@ -192,6 +191,13 @@ class GenerationOrchestrator:
                 logger.debug(f"Skipping file {path}: {e}")
                 continue
 
+        # Log context size metrics for debugging
+        total_size = sum(len(content) for content in outputs.values())
+        logger = logging.getLogger(__name__)
+        logger.debug(
+            f"Read {len(outputs)} files from previous steps (total size: {total_size:,} bytes)"
+        )
+
         return outputs
 
     def _build_step_context(self, step_id: str, base_context: dict[str, Any]) -> dict[str, Any]:
@@ -264,10 +270,11 @@ class GenerationOrchestrator:
         all_outputs = self._read_previous_step_outputs()
 
         # Filter to only matching patterns
+        # Use PurePath.match() instead of fnmatch for correct ** globstar handling
         filtered_outputs = {}
         for file_path, content in all_outputs.items():
             for pattern in patterns:
-                if fnmatch(file_path, pattern):
+                if PurePath(file_path).match(pattern):
                     filtered_outputs[file_path] = content
                     break
 
