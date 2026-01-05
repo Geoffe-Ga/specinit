@@ -83,9 +83,6 @@ npm-debug.log*
 # Script logs
 .logs/
 
-# Planning documents (work in progress)
-plan/*.md
-
 # Misc
 *.bak
 *.tmp
