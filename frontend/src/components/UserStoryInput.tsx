@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import type { UserStory } from '../types'
 import type { FieldErrors } from 'react-hook-form'
 import { useSuggestionContext } from '../contexts/SuggestionContext'
@@ -38,14 +38,6 @@ export function UserStoryInput({ value, onChange, errors }: UserStoryInputProps)
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const abortControllerRef = useRef<AbortController>()
-
-  // Cleanup: abort pending requests on unmount
-  useEffect(() => {
-    return () => {
-      abortControllerRef.current?.abort()
-    }
-  }, [])
 
   // Reset selection when user manually edits fields
   useEffect(() => {
@@ -57,27 +49,19 @@ export function UserStoryInput({ value, onChange, errors }: UserStoryInputProps)
   }
 
   const handleGetSuggestions = async () => {
-    // Cancel any pending request
-    abortControllerRef.current?.abort()
-    abortControllerRef.current = new AbortController()
-
     setShowSuggestions(true)
     setError(null)
     try {
       const results = await getSuggestions('user_stories')
       setSuggestions(results)
     } catch (err) {
-      // Don't show error if request was aborted
-      if (err instanceof Error && err.name === 'AbortError') {
-        return
-      }
       setError('Failed to load suggestions. Please try again.')
       setSuggestions([])
     }
   }
 
   const handleUseSuggestion = () => {
-    if (selectedIndex === null) return
+    if (selectedIndex === null || selectedIndex < 0 || selectedIndex >= suggestions.length) return
 
     const parsed = parseUserStory(suggestions[selectedIndex])
     if (parsed) {
@@ -101,20 +85,12 @@ export function UserStoryInput({ value, onChange, errors }: UserStoryInputProps)
   }
 
   const handleGetMore = async () => {
-    // Cancel any pending request
-    abortControllerRef.current?.abort()
-    abortControllerRef.current = new AbortController()
-
     setError(null)
     try {
       const results = await getSuggestions('user_stories')
       setSuggestions(results)
       setSelectedIndex(null)
     } catch (err) {
-      // Don't show error if request was aborted
-      if (err instanceof Error && err.name === 'AbortError') {
-        return
-      }
       setError('Failed to load suggestions. Please try again.')
       setSuggestions([])
     }
