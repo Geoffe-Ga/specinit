@@ -990,3 +990,108 @@ class TestGenerationOrchestrator:
             # Should have called set-url to update remote
             assert len(set_url_called) > 0
             assert "set-url" in set_url_called[0]
+
+    async def test_github_integration_redacts_token_from_error_messages(
+        self,
+        temp_dir: Path,
+        mock_claude_response: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Token should be redacted from git push error messages for security."""
+        monkeypatch.setenv("HOME", str(temp_dir))
+        configure_git_in_temp_home(temp_dir)
+
+        with (
+            patch("specinit.generator.orchestrator.Anthropic") as mock_anthropic,
+            patch("specinit.generator.orchestrator.ConfigManager") as mock_config,
+            patch("specinit.generator.orchestrator.HistoryManager") as mock_history,
+            patch("specinit.generator.orchestrator.GitHubService") as mock_gh_class,
+            patch("subprocess.run") as mock_subprocess,
+        ):
+            mock_client = MagicMock()
+            mock_client.messages.create.return_value = mock_claude_response
+            mock_anthropic.return_value = mock_client
+
+            mock_config_instance = MagicMock()
+            mock_config_instance.get_api_key.return_value = "sk-ant-test"
+            mock_config_instance.get.return_value = "claude-sonnet-4-5-20250929"
+            mock_config.return_value = mock_config_instance
+
+            mock_history_instance = MagicMock()
+            mock_history_instance.add_project.return_value = 1
+            mock_history.return_value = mock_history_instance
+
+            # Mock GitHub service
+            mock_gh = MagicMock()
+            mock_gh.parse_repo_url.return_value = ("owner", "repo")
+            mock_gh.repo_exists.return_value = False
+            mock_gh.__enter__.return_value = mock_gh
+            mock_gh.__exit__.return_value = None
+            mock_gh_class.return_value = mock_gh
+            mock_gh_class.get_token.return_value = "ghp_secret_token_12345"
+
+            # Mock subprocess to fail with error message containing the token
+            def subprocess_side_effect(*args, **kwargs):
+                cmd = args[0] if args else kwargs.get("args", [])
+                if "push" in cmd:
+                    # Error message contains the token (simulating URL exposure)
+                    error_with_token = b"fatal: could not read Username for 'https://x-access-token:ghp_secret_token_12345@github.com': terminal prompts disabled"
+                    raise subprocess.CalledProcessError(1, cmd, stderr=error_with_token)
+                # Return error for get-url check, success for everything else
+                if len(cmd) > 2 and cmd[2] == "get-url":
+                    return MagicMock(returncode=128, stdout=b"", stderr=b"")
+                return MagicMock(returncode=0, stdout=b"", stderr=b"")
+
+            mock_subprocess.side_effect = subprocess_side_effect
+
+            project_dir = temp_dir / "output-token-redact"
+            project_dir.mkdir(exist_ok=True)
+
+            orchestrator = GenerationOrchestrator(
+                output_dir=project_dir,
+                project_name="test-project",
+            )
+
+            # Track progress calls to verify error was reported
+            progress_calls: list[tuple[str, str, dict | None]] = []
+
+            async def track_progress(
+                step: str, status: str, details: dict[str, Any] | None
+            ) -> None:
+                progress_calls.append((step, status, details))
+
+            # Run generation
+            result = await orchestrator.generate(
+                platforms=["web"],
+                user_story={"role": "dev", "action": "test", "outcome": "verify"},
+                features=["Feature"],
+                tech_stack={"frontend": [], "backend": [], "database": [], "tools": []},
+                aesthetics=[],
+                github_config={
+                    "enabled": True,
+                    "repo_url": "https://github.com/owner/repo",
+                    "create_repo": True,
+                },
+                progress_callback=track_progress,
+            )
+
+            # Generation should succeed despite push failure
+            assert "path" in result
+
+            # Check that github_setup step failed
+            github_steps = [(s, st, d) for s, st, d in progress_calls if s == "github_setup"]
+            assert len(github_steps) > 0
+
+            # Find the failed status
+            failed_steps = [d for s, st, d in github_steps if st == "failed" and d is not None]
+            assert len(failed_steps) > 0
+
+            # Verify token was redacted from error message
+            error_detail = failed_steps[0]
+            error_message = error_detail.get("name", "")
+            # Token should NOT appear in error message
+            assert "ghp_secret_token_12345" not in error_message
+            # Redaction marker should appear
+            assert (
+                "***REDACTED***" in error_message or "network connection" in error_message.lower()
+            )

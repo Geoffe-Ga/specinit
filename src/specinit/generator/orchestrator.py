@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-import os
 import subprocess
 import time
 from collections.abc import Callable, Coroutine
@@ -497,7 +496,7 @@ Generated with SpecInit
                 # Set up git remote and push initial commit
                 try:
                     await asyncio.to_thread(self._setup_github_remote_and_push, repo_url, token)
-                except subprocess.CalledProcessError as e:
+                except (subprocess.CalledProcessError, RuntimeError) as e:
                     if progress_callback:
                         await progress_callback(
                             "github_setup",
@@ -574,21 +573,43 @@ Generated with SpecInit
             timeout=10,
         )
 
-        # Set up environment for git authentication with token
-        # This avoids exposing the token in the URL or command line
-        env = os.environ.copy()
-        env["GIT_ASKPASS"] = "echo"  # Prevent interactive prompts
-        env["GIT_USERNAME"] = "x-access-token"  # GitHub convention for token auth
-        env["GIT_PASSWORD"] = token
+        # Parse URL and inject credentials for HTTPS URLs
+        parsed = urlparse(repo_url)
 
-        # Push to GitHub (can be slow for large repos, so give it 5 minutes)
-        subprocess.run(
-            ["git", "push", "-u", "origin", "main"],
-            cwd=self.project_path,
-            check=True,
-            timeout=300,  # 5 minutes for large repos with slow networks
-            env=env,  # Pass environment with credentials
-        )
+        # Only inject credentials for HTTPS (SSH doesn't need it)
+        if parsed.scheme in ("https", "http"):
+            # Build authenticated URL using standard git mechanism
+            # Token is embedded in URL which is standard practice for CI/automation
+            authenticated_url = (
+                f"{parsed.scheme}://x-access-token:{token}@{parsed.netloc}{parsed.path}"
+            )
+        else:
+            # SSH or other schemes - use as-is
+            authenticated_url = repo_url
+
+        try:
+            # Push with credentials, capture output to prevent token leakage
+            result = subprocess.run(
+                ["git", "push", "-u", authenticated_url, "main"],
+                cwd=self.project_path,
+                capture_output=True,  # CRITICAL: prevent token in terminal
+                check=True,
+                timeout=300,  # 5 minutes for large repos with slow networks
+            )
+        except subprocess.CalledProcessError as e:
+            # Redact token from error message before raising
+            error_msg = e.stderr.decode() if e.stderr else str(e)
+            if token in error_msg:
+                error_msg = error_msg.replace(token, "***REDACTED***")
+            raise RuntimeError(f"Git push failed: {error_msg}") from e
+        finally:
+            # Clean up: remove any cached credentials from git config
+            subprocess.run(
+                ["git", "config", "--unset", "credential.helper"],
+                cwd=self.project_path,
+                capture_output=True,
+                check=False,  # OK if not set
+            )
 
     async def _create_github_issues(
         self, github: GitHubService, owner: str, repo_name: str, context: dict[str, Any]
