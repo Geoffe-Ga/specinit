@@ -126,28 +126,38 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
     defaultValues: DEFAULT_VALUES,
   })
 
-  const currentValues = watch()
+  // Watch individual fields instead of entire form to optimize dependency tracking
+  const name = watch('name')
+  const projectDescription = watch('projectDescription')
+  const platforms = watch('platforms')
+  const userStory = watch('userStory')
+  const features = watch('features')
+  const techStack = watch('techStack')
+  const aesthetics = watch('aesthetics')
+  const additionalContext = watch('additionalContext')
+  const enableSuggestions = watch('enableSuggestions')
+  const github = watch('github')
 
   // Update suggestion context with debouncing to prevent excessive re-renders
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      updateContext('projectName', currentValues.name)
-      updateContext('projectDescription', currentValues.projectDescription)
-      updateContext('platforms', currentValues.platforms)
-      updateContext('userStory', currentValues.userStory)
-      updateContext('features', currentValues.features)
-      updateContext('techStack', currentValues.techStack)
-      updateContext('aesthetics', currentValues.aesthetics)
-      updateContext('additionalContext', currentValues.additionalContext)
+      updateContext('projectName', name)
+      updateContext('projectDescription', projectDescription)
+      updateContext('platforms', platforms)
+      updateContext('userStory', userStory)
+      updateContext('features', features)
+      updateContext('techStack', techStack)
+      updateContext('aesthetics', aesthetics)
+      updateContext('additionalContext', additionalContext)
     }, 300) // 300ms debounce to avoid updates on every keystroke
 
     return () => clearTimeout(timeoutId)
-  }, [currentValues, updateContext])
+  }, [name, projectDescription, platforms, userStory, features, techStack, aesthetics, additionalContext, updateContext])
 
   // Update suggestions enabled state
   useEffect(() => {
-    setSuggestionsEnabled(currentValues.enableSuggestions ?? false)
-  }, [currentValues.enableSuggestions, setSuggestionsEnabled])
+    setSuggestionsEnabled(enableSuggestions ?? false)
+  }, [enableSuggestions, setSuggestionsEnabled])
 
   const handleFormSubmit = (data: ProjectFormData) => {
     onSubmit(data)
@@ -155,6 +165,20 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
 
   const nextStep = () => setStep((s) => Math.min(s + 1, TOTAL_STEPS))
   const prevStep = () => setStep((s) => Math.max(s - 1, 1))
+
+  // Create values object for StepRenderer from individual watched fields
+  const currentValues: ProjectFormData = {
+    name,
+    projectDescription: projectDescription || '',
+    enableSuggestions: enableSuggestions ?? false,
+    platforms,
+    userStory,
+    features,
+    techStack,
+    aesthetics,
+    github,
+    additionalContext: additionalContext || '',
+  }
 
   return (
     <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
