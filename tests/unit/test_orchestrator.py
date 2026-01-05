@@ -76,6 +76,30 @@ class TestContextAccumulation:
         assert not any(".git" in path for path in outputs)
         assert not any("node_modules" in path for path in outputs)
 
+    def test_read_previous_step_outputs_includes_important_dotfiles(self, orchestrator):
+        """Should include important configuration dotfiles like .eslintrc.json."""
+        # Ensure project directory exists
+        orchestrator.project_path.mkdir(parents=True, exist_ok=True)
+
+        # Create important dotfiles that should NOT be skipped
+        (orchestrator.project_path / ".eslintrc.json").write_text('{"extends": "standard"}')
+        (orchestrator.project_path / ".prettierrc").write_text('{"semi": false}')
+        (orchestrator.project_path / ".env.example").write_text("API_KEY=your-key-here")
+
+        # Also create a cache directory that should be skipped
+        (orchestrator.project_path / ".pytest_cache").mkdir(parents=True, exist_ok=True)
+        (orchestrator.project_path / ".pytest_cache" / "data.json").write_text("{}")
+
+        outputs = orchestrator._read_previous_step_outputs()
+
+        # Should include important dotfiles
+        assert ".eslintrc.json" in outputs
+        assert ".prettierrc" in outputs
+        assert ".env.example" in outputs
+
+        # Should exclude cache directories
+        assert not any(".pytest_cache" in path for path in outputs)
+
     def test_read_previous_step_outputs_limits_file_size(self, orchestrator):
         """Should truncate very large files to prevent context overflow."""
         (orchestrator.project_path / "plan").mkdir(parents=True, exist_ok=True)
@@ -121,8 +145,10 @@ class TestContextAccumulation:
 
         step_context = orchestrator._build_step_context("product_spec", base_context)
 
-        # First step should not have previous_outputs
-        assert "previous_outputs" not in step_context or step_context["previous_outputs"] == {}
+        # First step should have base context but not previous_outputs key
+        assert "project_name" in step_context
+        assert "platforms" in step_context
+        assert "previous_outputs" not in step_context
 
     def test_build_step_context_includes_only_relevant_previous_steps(self, orchestrator):
         """Should only include outputs from steps that came before the current step."""

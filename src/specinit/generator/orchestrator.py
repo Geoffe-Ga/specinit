@@ -152,7 +152,7 @@ class GenerationOrchestrator:
         outputs: dict[str, str] = {}
         max_file_size = 50_000  # 50KB limit per file
 
-        # Directories to skip
+        # Directories and cache folders to skip
         skip_dirs = {
             ".git",
             "__pycache__",
@@ -162,6 +162,10 @@ class GenerationOrchestrator:
             ".venv",
             "venv",
             ".pytest_cache",
+            ".mypy_cache",
+            ".ruff_cache",
+            ".tox",
+            ".nox",
         }
 
         for path in self.project_path.rglob("*"):
@@ -169,7 +173,7 @@ class GenerationOrchestrator:
                 continue
 
             # Skip if any part of the path is in skip_dirs
-            if any(part in skip_dirs or part.startswith(".") for part in path.parts):
+            if any(part in skip_dirs for part in path.parts):
                 continue
 
             try:
@@ -181,8 +185,10 @@ class GenerationOrchestrator:
                     content = content[:max_file_size] + "\n\n[Truncated - file too large]"
 
                 outputs[str(rel_path)] = content
-            except (UnicodeDecodeError, OSError):
+            except (UnicodeDecodeError, OSError) as e:
                 # Skip binary files and files that can't be read
+                logger = logging.getLogger(__name__)
+                logger.debug(f"Skipping file {path}: {e}")
                 continue
 
         return outputs
