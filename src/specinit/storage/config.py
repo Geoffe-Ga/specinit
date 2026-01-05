@@ -114,7 +114,7 @@ class ConfigManager:
                     api_key = key_path.read_text().strip()
                     if api_key:
                         return api_key
-            except Exception as e:
+            except (OSError, PermissionError, UnicodeDecodeError) as e:
                 logger.warning(f"Failed to read API key from file {key_file_path}: {e}")
                 return None
 
