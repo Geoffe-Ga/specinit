@@ -653,3 +653,231 @@ class TestProjectDescription:
             aesthetics=["minimalist"],
         )
         assert len(config.project_description) == 500
+
+
+class TestSuggestEndpoint:
+    """Tests for /api/suggest endpoint (Issue #37)."""
+
+    def test_suggest_user_stories_success(self, client, _mock_config_manager):
+        """Should return user story suggestions given project description."""
+        with patch("specinit.server.app.Anthropic") as mock_anthropic:
+            # Mock Claude API response
+            mock_message = MagicMock()
+            mock_message.content = [
+                MagicMock(
+                    text="As a researcher, I want to create daily notes, so that I can document my progress\nAs a researcher, I want to tag notes by project, so that I can organize my work\nAs a researcher, I want to search past notes, so that I can find information"
+                )
+            ]
+            mock_message.usage = MagicMock(input_tokens=450, output_tokens=180)
+            mock_client = MagicMock()
+            mock_client.messages.create.return_value = mock_message
+            mock_anthropic.return_value = mock_client
+
+            response = client.post(
+                "/api/suggest",
+                json={
+                    "field": "user_stories",
+                    "context": {
+                        "project_name": "ResearchNotes",
+                        "project_description": "A mobile app for tracking daily research notes",
+                        "platforms": ["iOS", "Android"],
+                    },
+                    "count": 3,
+                },
+            )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert "suggestions" in data
+            assert "cost" in data
+            assert "tokens_used" in data
+            assert len(data["suggestions"]) == 3
+            assert isinstance(data["cost"], float)
+            assert data["cost"] > 0
+            assert data["tokens_used"]["input"] == 450
+            assert data["tokens_used"]["output"] == 180
+
+    def test_suggest_features_success(self, client, _mock_config_manager):
+        """Should return feature suggestions given user story."""
+        with patch("specinit.server.app.Anthropic") as mock_anthropic:
+            mock_message = MagicMock()
+            mock_message.content = [
+                MagicMock(
+                    text="Rich text editor for notes\nDate-based organization\nTag management\nSearch functionality"
+                )
+            ]
+            mock_message.usage = MagicMock(input_tokens=500, output_tokens=150)
+            mock_client = MagicMock()
+            mock_client.messages.create.return_value = mock_message
+            mock_anthropic.return_value = mock_client
+
+            response = client.post(
+                "/api/suggest",
+                json={
+                    "field": "features",
+                    "context": {
+                        "project_name": "ResearchNotes",
+                        "userStory": {
+                            "role": "researcher",
+                            "action": "create daily notes",
+                            "outcome": "document progress",
+                        },
+                    },
+                    "count": 4,
+                },
+            )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert len(data["suggestions"]) == 4
+
+    def test_suggest_tech_stack_success(self, client, _mock_config_manager):
+        """Should return tech stack suggestions given features and platforms."""
+        with patch("specinit.server.app.Anthropic") as mock_anthropic:
+            mock_message = MagicMock()
+            mock_message.content = [MagicMock(text="React Native\nExpo\nFastAPI\nSQLite")]
+            mock_message.usage = MagicMock(input_tokens=600, output_tokens=100)
+            mock_client = MagicMock()
+            mock_client.messages.create.return_value = mock_message
+            mock_anthropic.return_value = mock_client
+
+            response = client.post(
+                "/api/suggest",
+                json={
+                    "field": "tech_stack",
+                    "context": {
+                        "platforms": ["iOS", "Android"],
+                        "features": ["Rich text editor", "Search"],
+                    },
+                },
+            )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert len(data["suggestions"]) > 0
+
+    def test_suggest_without_api_key_fails(self, client):
+        """Should return error when API key is not configured."""
+        with patch("specinit.server.app.ConfigManager") as mock:
+            instance = MagicMock()
+            instance.get_api_key.return_value = None
+            mock.return_value = instance
+
+            response = client.post(
+                "/api/suggest",
+                json={
+                    "field": "user_stories",
+                    "context": {"project_description": "A test app"},
+                },
+            )
+
+            assert response.status_code == 401
+            data = response.json()
+            assert "API key" in data["detail"]
+
+    def test_suggest_invalid_field_fails(self, client, _mock_config_manager):
+        """Should return 400 for unsupported field types."""
+        response = client.post(
+            "/api/suggest",
+            json={
+                "field": "invalid_field",
+                "context": {},
+            },
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert "not supported" in data["detail"].lower()
+
+    def test_suggest_with_count_parameter(self, client, _mock_config_manager):
+        """Should respect count parameter (1-10)."""
+        with patch("specinit.server.app.Anthropic") as mock_anthropic:
+            mock_message = MagicMock()
+            mock_message.content = [
+                MagicMock(
+                    text="Suggestion 1\nSuggestion 2\nSuggestion 3\nSuggestion 4\nSuggestion 5"
+                )
+            ]
+            mock_message.usage = MagicMock(input_tokens=400, output_tokens=120)
+            mock_client = MagicMock()
+            mock_client.messages.create.return_value = mock_message
+            mock_anthropic.return_value = mock_client
+
+            response = client.post(
+                "/api/suggest",
+                json={
+                    "field": "features",
+                    "context": {},
+                    "count": 5,
+                },
+            )
+
+            assert response.status_code == 200
+            assert len(response.json()["suggestions"]) == 5
+
+    def test_suggest_validates_count_range(self, client, _mock_config_manager):
+        """Should reject count outside 1-10 range."""
+        # Test count > 10
+        response = client.post(
+            "/api/suggest",
+            json={
+                "field": "features",
+                "context": {},
+                "count": 11,
+            },
+        )
+        assert response.status_code == 422  # Pydantic validation error
+
+        # Test count < 1
+        response = client.post(
+            "/api/suggest",
+            json={
+                "field": "features",
+                "context": {},
+                "count": 0,
+            },
+        )
+        assert response.status_code == 422
+
+    def test_suggest_uses_current_value_to_refine(self, client, _mock_config_manager):
+        """Should include current_value in prompt to refine suggestions."""
+        with patch("specinit.server.app.Anthropic") as mock_anthropic:
+            mock_message = MagicMock()
+            mock_message.content = [MagicMock(text="Advanced search\nFull-text search")]
+            mock_message.usage = MagicMock(input_tokens=400, output_tokens=80)
+            mock_client = MagicMock()
+            mock_client.messages.create.return_value = mock_message
+            mock_anthropic.return_value = mock_client
+
+            response = client.post(
+                "/api/suggest",
+                json={
+                    "field": "features",
+                    "context": {},
+                    "current_value": "search",
+                    "count": 2,
+                },
+            )
+
+            assert response.status_code == 200
+            # Verify that the create call was made
+            mock_client.messages.create.assert_called_once()
+
+    def test_suggest_handles_api_timeout(self, client, _mock_config_manager):
+        """Should return 408 when Claude API times out."""
+        with patch("specinit.server.app.Anthropic") as mock_anthropic:
+            mock_client = MagicMock()
+            mock_client.messages.create.side_effect = TimeoutError("API timeout")
+            mock_anthropic.return_value = mock_client
+
+            response = client.post(
+                "/api/suggest",
+                json={
+                    "field": "features",
+                    "context": {},
+                },
+            )
+
+            assert response.status_code == 408
+            data = response.json()
+            assert "timeout" in data["detail"].lower()
