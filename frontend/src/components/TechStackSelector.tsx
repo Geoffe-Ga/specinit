@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { TECH_OPTIONS, type TechStack } from '../types'
 import { useSuggestionContext } from '../contexts/SuggestionContext'
 
@@ -52,26 +52,44 @@ export function TechStackSelector({ value, onChange, platforms }: TechStackSelec
   const { suggestionsEnabled, getSuggestions, isLoading } = useSuggestionContext()
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
+  const hasFetchedRef = useRef(false)
+  const isMountedRef = useRef(true)
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
+
+  const handleGetSuggestions = useCallback(async () => {
+    setShowSuggestions(true)
+    const results = await getSuggestions('tech_stack')
+    if (isMountedRef.current) {
+      setSuggestions(results)
+    }
+  }, [getSuggestions])
 
   // Auto-trigger suggestions when component mounts if enabled
   useEffect(() => {
-    if (suggestionsEnabled && !showSuggestions && suggestions.length === 0) {
+    if (suggestionsEnabled && !showSuggestions && suggestions.length === 0 && !hasFetchedRef.current) {
+      hasFetchedRef.current = true
       handleGetSuggestions()
     }
-  }, [suggestionsEnabled]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [suggestionsEnabled, showSuggestions, suggestions.length, handleGetSuggestions])
 
-  const handleGetSuggestions = async () => {
-    setShowSuggestions(true)
-    const results = await getSuggestions('tech_stack')
-    setSuggestions(results)
-  }
-
-  const handleAddSuggestion = (suggestion: string) => {
+  const handleAddSuggestion = useCallback((suggestion: string) => {
     // Try to categorize the suggestion based on TECH_OPTIONS
+    // Use word boundary regex for more precise matching
     let category: keyof TechStack | null = null
 
     for (const [cat, options] of Object.entries(TECH_OPTIONS)) {
-      if (options.some((opt) => suggestion.toLowerCase().includes(opt.toLowerCase()))) {
+      const match = options.some((opt) => {
+        // Use word boundary regex to avoid false positives like "Reactive" matching "React"
+        const regex = new RegExp(`\\b${opt}\\b`, 'i')
+        return regex.test(suggestion)
+      })
+      if (match) {
         category = cat as keyof TechStack
         break
       }
@@ -84,16 +102,18 @@ export function TechStackSelector({ value, onChange, platforms }: TechStackSelec
     if (!value[category].includes(suggestion)) {
       onChange({ ...value, [category]: [...value[category], suggestion] })
     }
-  }
+  }, [value, onChange])
 
   const handleSkipAll = () => {
     setShowSuggestions(false)
   }
 
-  const handleGetMore = async () => {
+  const handleGetMore = useCallback(async () => {
     const results = await getSuggestions('tech_stack')
-    setSuggestions(results)
-  }
+    if (isMountedRef.current) {
+      setSuggestions(results)
+    }
+  }, [getSuggestions])
 
   const toggleOption = (category: keyof TechStack, option: string) => {
     const current = value[category]
@@ -108,15 +128,45 @@ export function TechStackSelector({ value, onChange, platforms }: TechStackSelec
 
   return (
     <div className="space-y-6">
+      {/* Loading State */}
+      {suggestionsEnabled && showSuggestions && isLoading && suggestions.length === 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-center justify-center gap-2 text-blue-700">
+            <span className="animate-spin" aria-hidden="true">🔄</span>
+            <span>Generating tech stack recommendations...</span>
+          </div>
+        </div>
+      )}
+
+      {/* Empty Suggestions State */}
+      {suggestionsEnabled && showSuggestions && !isLoading && suggestions.length === 0 && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <p className="text-sm text-yellow-800">
+            <span aria-hidden="true">⚠️</span> No suggestions available at this time.
+          </p>
+          <p className="text-xs text-yellow-600 mt-1">
+            Please choose technologies manually below or try again.
+          </p>
+          <button
+            type="button"
+            onClick={handleSkipAll}
+            className="mt-2 py-2 px-4 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+          >
+            Continue manually
+          </button>
+        </div>
+      )}
+
       {/* Suggestions Display */}
-      {suggestionsEnabled && showSuggestions && suggestions.length > 0 && (
+      {suggestionsEnabled && showSuggestions && !isLoading && suggestions.length > 0 && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
           <p className="text-sm font-medium text-blue-900">
-            💡 Recommended technologies for your project:
+            <span className="sr-only">Recommended technologies for your project</span>
+            <span aria-hidden="true">💡</span> Recommended technologies for your project:
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {suggestions.map((suggestion, index) => {
+            {suggestions.map((suggestion) => {
               const isAdded =
                 value.frontend.includes(suggestion) ||
                 value.backend.includes(suggestion) ||
@@ -125,7 +175,7 @@ export function TechStackSelector({ value, onChange, platforms }: TechStackSelec
 
               return (
                 <button
-                  key={index}
+                  key={suggestion}
                   type="button"
                   onClick={() => handleAddSuggestion(suggestion)}
                   disabled={isAdded}
@@ -134,10 +184,11 @@ export function TechStackSelector({ value, onChange, platforms }: TechStackSelec
                       ? 'border-green-500 bg-green-50 text-green-900'
                       : 'border-gray-200 bg-white hover:border-blue-300'
                   }`}
+                  aria-label={isAdded ? `${suggestion} - already added` : `Add ${suggestion}`}
                 >
                   {isAdded ? (
                     <span className="flex items-center gap-2">
-                      <span className="text-green-600">✓</span> {suggestion}
+                      <span className="text-green-600" aria-hidden="true">✓</span> {suggestion}
                     </span>
                   ) : (
                     suggestion
@@ -153,13 +204,15 @@ export function TechStackSelector({ value, onChange, platforms }: TechStackSelec
               onClick={handleGetMore}
               disabled={isLoading}
               className="py-2 px-4 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Get more tech stack suggestions"
             >
-              Get more
+              {isLoading ? 'Loading...' : 'Get more'}
             </button>
             <button
               type="button"
               onClick={handleSkipAll}
               className="py-2 px-4 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+              aria-label="Skip suggestions and choose manually"
             >
               Skip all
             </button>
