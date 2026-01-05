@@ -22,6 +22,7 @@ export interface GitHubConfig {
 export interface ProjectConfig {
   name: string
   projectDescription?: string
+  enableSuggestions?: boolean
   platforms: string[]
   userStory: UserStory
   features: string[]
