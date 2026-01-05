@@ -16,6 +16,7 @@ const projectSchema = z.object({
     .string()
     .max(500, 'Project description must be less than 500 characters')
     .optional(),
+  enableSuggestions: z.boolean().optional(),
   platforms: z.array(z.string()).min(1, 'Select at least one platform'),
   userStory: z.object({
     role: z.string().min(3, 'Role must be at least 3 characters'),
@@ -73,6 +74,7 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
     defaultValues: {
       name: '',
       projectDescription: '',
+      enableSuggestions: false,
       platforms: [],
       userStory: { role: '', action: '', outcome: '' },
       features: [''],
@@ -167,6 +169,80 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
             </div>
             {errors.projectDescription && (
               <p className="mt-1 text-sm text-red-600">{errors.projectDescription.message}</p>
+            )}
+          </div>
+
+          {/* Auto-Suggestions Toggle (Issue #36) */}
+          <div className="mb-6 p-4 border border-gray-200 rounded-lg">
+            <div className="flex items-center justify-between mb-3">
+              <label className="text-sm font-medium text-gray-700">
+                Enable Auto-Suggestions
+              </label>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={currentValues.enableSuggestions}
+                onClick={() => setValue('enableSuggestions', !currentValues.enableSuggestions)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                  currentValues.enableSuggestions ? 'bg-blue-600' : 'bg-gray-200'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    currentValues.enableSuggestions ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {!currentValues.enableSuggestions ? (
+              // Information panel when OFF
+              <div className="space-y-3">
+                <p className="text-sm text-gray-600">
+                  Get AI-powered suggestions for user stories, features, tech stack, and more as you fill out the form.
+                </p>
+
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-gray-700">Benefits:</p>
+                  <ul className="text-sm text-gray-600 space-y-1">
+                    <li className="flex items-start">
+                      <span className="mr-2">✨</span>
+                      <span>Faster project setup</span>
+                    </li>
+                    <li className="flex items-start">
+                      <span className="mr-2">🎯</span>
+                      <span>Comprehensive feature suggestions</span>
+                    </li>
+                    <li className="flex items-start">
+                      <span className="mr-2">🔧</span>
+                      <span>Proven tech stack recommendations</span>
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="pt-2 border-t border-gray-200">
+                  <p className="text-sm text-gray-700">
+                    <span className="font-medium">Estimated cost:</span>{' '}
+                    <span className="text-gray-600">$0.05 - $0.15 per session</span>
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Uses your configured Claude API key
+                  </p>
+                </div>
+              </div>
+            ) : (
+              // Active indicator when ON
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-blue-600">✨ Auto-Suggestions Active</span>
+                </div>
+                <p className="text-sm text-gray-600">
+                  Session cost so far: <span className="font-medium">$0.00</span>
+                </p>
+                <p className="text-xs text-gray-500">
+                  Suggestions will use your Claude API key
+                </p>
+              </div>
             )}
           </div>
 
