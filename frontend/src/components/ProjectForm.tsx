@@ -95,16 +95,20 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
 
   const currentValues = watch()
 
-  // Update suggestion context whenever form values change
+  // Update suggestion context with debouncing to prevent excessive re-renders
   useEffect(() => {
-    updateContext('projectName', currentValues.name)
-    updateContext('projectDescription', currentValues.projectDescription)
-    updateContext('platforms', currentValues.platforms)
-    updateContext('userStory', currentValues.userStory)
-    updateContext('features', currentValues.features)
-    updateContext('techStack', currentValues.techStack)
-    updateContext('aesthetics', currentValues.aesthetics)
-    updateContext('additionalContext', currentValues.additionalContext)
+    const timeoutId = setTimeout(() => {
+      updateContext('projectName', currentValues.name)
+      updateContext('projectDescription', currentValues.projectDescription)
+      updateContext('platforms', currentValues.platforms)
+      updateContext('userStory', currentValues.userStory)
+      updateContext('features', currentValues.features)
+      updateContext('techStack', currentValues.techStack)
+      updateContext('aesthetics', currentValues.aesthetics)
+      updateContext('additionalContext', currentValues.additionalContext)
+    }, 300) // 300ms debounce to avoid updates on every keystroke
+
+    return () => clearTimeout(timeoutId)
   }, [currentValues, updateContext])
 
   // Update suggestions enabled state
