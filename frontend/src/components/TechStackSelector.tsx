@@ -52,6 +52,7 @@ export function TechStackSelector({ value, onChange, platforms }: TechStackSelec
   const { suggestionsEnabled, getSuggestions, isLoading } = useSuggestionContext()
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const hasFetchedRef = useRef(false)
   const isMountedRef = useRef(true)
 
@@ -64,13 +65,21 @@ export function TechStackSelector({ value, onChange, platforms }: TechStackSelec
 
   const handleGetSuggestions = useCallback(async () => {
     setShowSuggestions(true)
-    const results = await getSuggestions('tech_stack')
-    if (isMountedRef.current) {
-      setSuggestions(results)
+    setError(null)
+    try {
+      const results = await getSuggestions('tech_stack')
+      if (isMountedRef.current) {
+        setSuggestions(results)
+      }
+    } catch (err) {
+      if (isMountedRef.current) {
+        setError('Failed to load suggestions. Please try again.')
+        setSuggestions([])
+      }
     }
   }, [getSuggestions])
 
-  // Auto-trigger suggestions when component mounts if enabled
+  // Auto-trigger suggestions when component mounts or when enabled
   useEffect(() => {
     if (suggestionsEnabled && !showSuggestions && suggestions.length === 0 && !hasFetchedRef.current) {
       hasFetchedRef.current = true
@@ -80,13 +89,15 @@ export function TechStackSelector({ value, onChange, platforms }: TechStackSelec
 
   const handleAddSuggestion = useCallback((suggestion: string) => {
     // Try to categorize the suggestion based on TECH_OPTIONS
-    // Use word boundary regex for more precise matching
+    // Use escaped regex for precise matching (handles special chars like . in Next.js)
     let category: keyof TechStack | null = null
 
     for (const [cat, options] of Object.entries(TECH_OPTIONS)) {
       const match = options.some((opt) => {
-        // Use word boundary regex to avoid false positives like "Reactive" matching "React"
-        const regex = new RegExp(`\\b${opt}\\b`, 'i')
+        // Escape special regex characters to handle tech names like "Next.js" or "C++"
+        const escaped = opt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        // Use word boundaries for whole-word matching to avoid false positives
+        const regex = new RegExp(`\\b${escaped}\\b`, 'i')
         return regex.test(suggestion)
       })
       if (match) {
@@ -106,12 +117,21 @@ export function TechStackSelector({ value, onChange, platforms }: TechStackSelec
 
   const handleSkipAll = () => {
     setShowSuggestions(false)
+    setError(null)
   }
 
   const handleGetMore = useCallback(async () => {
-    const results = await getSuggestions('tech_stack')
-    if (isMountedRef.current) {
-      setSuggestions(results)
+    setError(null)
+    try {
+      const results = await getSuggestions('tech_stack')
+      if (isMountedRef.current) {
+        setSuggestions(results)
+      }
+    } catch (err) {
+      if (isMountedRef.current) {
+        setError('Failed to load suggestions. Please try again.')
+        setSuggestions([])
+      }
     }
   }, [getSuggestions])
 
@@ -138,8 +158,42 @@ export function TechStackSelector({ value, onChange, platforms }: TechStackSelec
         </div>
       )}
 
+      {/* Error State */}
+      {suggestionsEnabled && showSuggestions && error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-start gap-2">
+            <span className="text-red-600" aria-hidden="true">❌</span>
+            <div className="flex-1">
+              <p className="text-sm font-medium text-red-800">{error}</p>
+              <p className="text-xs text-red-600 mt-1">
+                Check your internet connection and API key configuration.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2 mt-3">
+            <button
+              type="button"
+              onClick={handleGetSuggestions}
+              disabled={isLoading}
+              className="py-2 px-4 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Retry loading tech stack suggestions"
+            >
+              {isLoading ? 'Loading...' : 'Try again'}
+            </button>
+            <button
+              type="button"
+              onClick={handleSkipAll}
+              className="py-2 px-4 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+              aria-label="Dismiss error and choose manually"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Empty Suggestions State */}
-      {suggestionsEnabled && showSuggestions && !isLoading && suggestions.length === 0 && (
+      {suggestionsEnabled && showSuggestions && !error && !isLoading && suggestions.length === 0 && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
           <p className="text-sm text-yellow-800">
             <span aria-hidden="true">⚠️</span> No suggestions available at this time.
@@ -158,7 +212,7 @@ export function TechStackSelector({ value, onChange, platforms }: TechStackSelec
       )}
 
       {/* Suggestions Display */}
-      {suggestionsEnabled && showSuggestions && !isLoading && suggestions.length > 0 && (
+      {suggestionsEnabled && showSuggestions && !error && !isLoading && suggestions.length > 0 && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
           <p className="text-sm font-medium text-blue-900">
             <span className="sr-only">Recommended technologies for your project</span>
