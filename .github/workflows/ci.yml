@@ -89,3 +89,7 @@ jobs:
         if: ${{ steps.check-frontend.outputs.frontend_exists == 'true' }}
         working-directory: frontend
         run: npm run build
+
+      - name: Run tests
+        if: ${{ steps.check-frontend.outputs.frontend_exists == 'true' }}
+        run: ./scripts/test.sh --frontend
