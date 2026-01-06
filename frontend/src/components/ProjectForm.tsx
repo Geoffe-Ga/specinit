@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -8,6 +8,7 @@ import { FeatureList } from './FeatureList'
 import { TechStackSelector } from './TechStackSelector'
 import { AestheticsSelector } from './AestheticsSelector'
 import { GitHubSetup } from './GitHubSetup'
+import { useSuggestionContext } from '../contexts/SuggestionContext'
 import type { ProjectConfig } from '../types'
 
 const projectSchema = z.object({
@@ -62,6 +63,7 @@ interface ProjectFormProps {
 export function ProjectForm({ onSubmit }: ProjectFormProps) {
   const [step, setStep] = useState(1)
   const totalSteps = 7
+  const { updateContext, setSuggestionsEnabled } = useSuggestionContext()
 
   const {
     register,
@@ -92,6 +94,27 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
   })
 
   const currentValues = watch()
+
+  // Update suggestion context with debouncing to prevent excessive re-renders
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      updateContext('projectName', currentValues.name)
+      updateContext('projectDescription', currentValues.projectDescription)
+      updateContext('platforms', currentValues.platforms)
+      updateContext('userStory', currentValues.userStory)
+      updateContext('features', currentValues.features)
+      updateContext('techStack', currentValues.techStack)
+      updateContext('aesthetics', currentValues.aesthetics)
+      updateContext('additionalContext', currentValues.additionalContext)
+    }, 300) // 300ms debounce to avoid updates on every keystroke
+
+    return () => clearTimeout(timeoutId)
+  }, [currentValues, updateContext])
+
+  // Update suggestions enabled state
+  useEffect(() => {
+    setSuggestionsEnabled(currentValues.enableSuggestions ?? false)
+  }, [currentValues.enableSuggestions, setSuggestionsEnabled])
 
   const handleFormSubmit = (data: FormData) => {
     onSubmit(data)
