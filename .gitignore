@@ -68,6 +68,7 @@ dmypy.json
 node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/coverage/
 *.log
 npm-debug.log*
 
