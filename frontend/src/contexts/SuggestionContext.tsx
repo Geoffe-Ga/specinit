@@ -164,16 +164,24 @@ export function SuggestionProvider({ children }: { children: React.ReactNode }) 
         }
 
         // Cache the result
-        setSuggestionCache((prev) => ({
-          ...prev,
-          [cacheKey]: {
-            suggestions,
-            timestamp: Date.now(),
-          },
-        }))
+        setSuggestionCache((prev) => {
+          const newCache = {
+            ...prev,
+            [cacheKey]: {
+              suggestions,
+              timestamp: Date.now(),
+            },
+          }
 
-        // Clean cache periodically
-        cleanCache()
+          // Only clean cache if it's getting full (> 80% of max size)
+          const cacheSize = Object.keys(newCache).length
+          if (cacheSize > MAX_CACHE_SIZE * 0.8) {
+            // Schedule cleanup asynchronously to avoid blocking
+            setTimeout(cleanCache, 0)
+          }
+
+          return newCache
+        })
 
         return suggestions
       } catch (error) {

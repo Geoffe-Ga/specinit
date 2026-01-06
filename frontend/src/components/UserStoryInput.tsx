@@ -55,6 +55,7 @@ export function UserStoryInput({ value, onChange, errors }: UserStoryInputProps)
       const results = await getSuggestions('user_stories')
       setSuggestions(results)
     } catch (err) {
+      console.error('Failed to get user story suggestions:', err)
       setError('Failed to load suggestions. Please try again.')
       setSuggestions([])
     }
@@ -91,6 +92,7 @@ export function UserStoryInput({ value, onChange, errors }: UserStoryInputProps)
       setSuggestions(results)
       setSelectedIndex(null)
     } catch (err) {
+      console.error('Failed to get more user story suggestions:', err)
       setError('Failed to load suggestions. Please try again.')
       setSuggestions([])
     }
