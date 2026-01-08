@@ -34,6 +34,7 @@ REQUIRED actions:
 # CORRECT - Use these commands (in order of preference)
 pre-commit run --all-files     # Best: runs all checks as CI would
 ./scripts/lint.sh              # Linting: ruff check, ruff format, mypy
+./scripts/complexity.sh        # Complexity: xenon, radon, import-linter
 ./scripts/test.sh              # Tests: pytest with coverage
 ./scripts/check.sh             # Both lint and test
 
@@ -42,6 +43,7 @@ python -m ruff check src/      # May use wrong Python
 python -m mypy src/            # May use wrong Python
 pytest tests/                  # Bypasses coverage and config
 ruff format src/               # May use wrong version
+xenon src/                     # May use wrong Python or thresholds
 ```
 
 **Why?** Running tools directly via `python -m` or bare commands may use system Python instead of the virtual environment. Scripts ensure:
@@ -190,6 +192,40 @@ pre-commit run --all-files
 # Auto-fix issues (RECOMMENDED)
 ./scripts/format.sh
 ```
+
+### Running Complexity Checks
+
+```bash
+# Check code complexity and architectural boundaries (RECOMMENDED)
+./scripts/complexity.sh
+
+# Check Python only
+./scripts/complexity.sh --python
+
+# Check frontend only
+./scripts/complexity.sh --frontend
+
+# Via pre-commit
+pre-commit run complexity --all-files
+```
+
+**What does this check?**
+- **Cyclomatic Complexity** (xenon): Ensures functions aren't too complex
+- **Maintainability Index** (radon): Measures code maintainability
+- **Architectural Boundaries** (import-linter): Prevents layer violations
+- **Module Dependencies** (dependency-cruiser): Prevents circular dependencies (frontend)
+
+**Current Thresholds:**
+- Python: Max complexity D (21-50), targeting C (11-20) - See #70
+- Modules: Max average D (21-50)
+- Overall: Max average B (6-10)
+- Architectural contracts: 5 enforced, see `.importlinter`
+
+**If complexity checks fail:**
+1. Read the error message - it shows which function/module is too complex
+2. Consider refactoring: extract methods, reduce nesting, simplify conditionals
+3. See #70 for refactoring guidance
+4. DO NOT suppress warnings - fix the root cause (Rule 1: No Shortcuts)
 
 ### Adding a New Feature
 

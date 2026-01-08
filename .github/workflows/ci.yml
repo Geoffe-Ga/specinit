@@ -34,6 +34,9 @@ jobs:
       - name: Run linters and type checking
         run: ./scripts/lint.sh
 
+      - name: Run complexity checks
+        run: ./scripts/complexity.sh
+
       - name: Run tests
         run: ./scripts/test.sh
 

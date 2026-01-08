@@ -1,0 +1,85 @@
+[importlinter]
+root_package = specinit
+include_external_packages = True
+
+# =============================================================================
+# Layer Architecture
+# =============================================================================
+# Enforce a layered architecture where dependencies flow in one direction:
+#
+# CLI/Server (Presentation) → Generator/GitHub (Application) → Storage (Infrastructure)
+#
+# This prevents:
+# - Storage depending on business logic
+# - Generator depending on CLI details
+# - Circular dependencies between modules
+# =============================================================================
+
+[importlinter:contract:layer-architecture]
+name = Layered architecture (Presentation → Application → Infrastructure)
+type = layers
+layers =
+    specinit.cli
+    specinit.server
+    specinit.generator
+    specinit.github
+    specinit.storage
+# Note: This enforces that lower layers (storage) don't depend on upper layers (cli/server)
+# CLI can use server (for the server command), server can use generator, etc.
+
+# =============================================================================
+# Independence Contracts
+# =============================================================================
+# Ensure certain modules remain independent and don't create circular dependencies
+
+[importlinter:contract:storage-independence]
+name = Storage layer should not depend on application logic
+type = forbidden
+source_modules =
+    specinit.storage
+forbidden_modules =
+    specinit.generator
+    specinit.github
+    specinit.cli
+    specinit.server
+
+# TODO (#72): Refactor CLI-Server dependency
+# Currently CLI imports specinit.server.app.start_server for the server command
+# This should be decoupled using dependency injection or a facade pattern
+# [importlinter:contract:cli-server-independence]
+# name = CLI and Server should not depend on each other
+# type = independence
+# modules =
+#     specinit.cli
+#     specinit.server
+
+# =============================================================================
+# Forbidden Dependencies
+# =============================================================================
+# Prevent specific problematic dependencies
+
+[importlinter:contract:no-test-imports-in-src]
+name = Source code should not import from tests
+type = forbidden
+source_modules =
+    specinit
+forbidden_modules =
+    tests
+
+[importlinter:contract:generator-no-cli-details]
+name = Generator should not import CLI implementation details
+type = forbidden
+source_modules =
+    specinit.generator
+forbidden_modules =
+    specinit.cli.main
+    specinit.cli.commands
+
+[importlinter:contract:generator-no-server-details]
+name = Generator should not import Server implementation details
+type = forbidden
+source_modules =
+    specinit.generator
+forbidden_modules =
+    specinit.server.app
+    specinit.server.routes
