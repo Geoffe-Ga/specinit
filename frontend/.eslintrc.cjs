@@ -25,7 +25,7 @@ module.exports = {
     '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
 
     // Complexity rules - start with lenient baselines, tighten incrementally
-    // Current baselines accommodate existing code; see #75 for tightening plan
+    // Current baselines accommodate existing code; see #78 for tightening plan
     complexity: ['error', { max: 20 }], // Cyclomatic complexity (C-rank)
     'max-depth': ['error', { max: 4 }], // Nesting depth
     'max-lines': [
@@ -37,7 +37,7 @@ module.exports = {
       { max: 320, skipBlankLines: true, skipComments: true },
     ],
     'max-params': ['error', { max: 5 }], // Function parameters
-    'max-statements': ['error', { max: 25 }, { ignoreTopLevelFunctions: false }],
+    'max-statements': ['error', { max: 25 }],
 
     // Import organization and boundaries
     'import/no-cycle': 'error', // Circular dependencies
