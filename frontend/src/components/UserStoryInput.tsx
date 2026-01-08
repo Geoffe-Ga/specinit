@@ -1,5 +1,6 @@
-import type { UserStory } from '../types'
 import type { FieldErrors } from 'react-hook-form'
+
+import type { UserStory } from '../types'
 
 interface UserStoryInputProps {
   value: UserStory
