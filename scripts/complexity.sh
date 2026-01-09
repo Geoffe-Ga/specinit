@@ -5,6 +5,8 @@
 #
 # Runs complexity and architectural linters to enforce:
 #   - Low cyclomatic complexity (xenon)
+#   - Cognitive complexity (radon)
+#   - Dead code detection (vulture)
 #   - Maintainability metrics (radon)
 #   - Architectural boundaries (import-linter)
 #   - Module dependency rules (dependency-cruiser for TypeScript)
@@ -57,18 +59,25 @@ CHECK_PATHS=()
 ERRORS=0
 START_TIME=$(date +%s)
 
-# Complexity thresholds
-# A: Simple (1-5)
-# B: Well structured (6-10)
-# C: Complex (11-20)
-# D: Too complex (21-50)
-# E: Unmaintainable (51-100)
-# F: Extremely unmaintainable (>100)
+# Complexity thresholds - World-class standards (Issue #81)
+# A: Simple (1-5)      - Target for most functions
+# B: Well structured (6-10) - Acceptable for complex workflows
+# C: Complex (11-20)   - Should be rare, requires justification
+# D: Too complex (21-50) - Not allowed
+# E: Unmaintainable (51-100) - Not allowed
+# F: Extremely unmaintainable (>100) - Not allowed
 
-# Current thresholds - refactored D-ranked functions to C-rank (Issue #70)
-XENON_MAX_ABSOLUTE="C"  # Max complexity for any single block
-XENON_MAX_MODULES="C"   # Max average complexity per module
-XENON_MAX_AVERAGE="B"   # Max average complexity overall
+# Xenon thresholds (cyclomatic complexity)
+XENON_MAX_ABSOLUTE="C"  # Max complexity for any single block (allows workflow methods)
+XENON_MAX_MODULES="B"   # Max average complexity per module (tightened from C)
+XENON_MAX_AVERAGE="A"   # Max average complexity overall (tightened from B)
+
+# Cognitive complexity threshold (via radon cc)
+# Workflow orchestration methods may reach C-rank (11-20), consistent with xenon
+# Lower is better: C-rank (11-20) for workflow orchestration, A/B (1-10) for utilities
+
+# Vulture minimum confidence (60% = only report high-confidence dead code)
+VULTURE_MIN_CONFIDENCE=60
 
 # =============================================================================
 # Help
@@ -94,11 +103,17 @@ EXAMPLES:
     ./scripts/complexity.sh --python         # Check Python only
     ./scripts/complexity.sh src/specinit     # Check specific path
 
-THRESHOLDS:
-    Python (xenon):
-      Max absolute complexity: D (21-50)
-      Max module complexity:   D (21-50)
-      Max average complexity:  B (6-10)
+THRESHOLDS (World-class standards - Issue #81):
+    Python (xenon - cyclomatic complexity):
+      Max absolute complexity: C (11-20)
+      Max module complexity:   B (6-10)
+      Max average complexity:  A (1-5)
+
+    Python (radon - cognitive complexity):
+      Max cognitive complexity per function: 15
+
+    Python (vulture - dead code):
+      Must have 0 dead code (confidence >= 60%)
 
     Python (import-linter):
       Enforces architectural boundaries defined in .importlinter
@@ -209,18 +224,66 @@ check_python_complexity() {
         ((ERRORS++))
     fi
 
-    # Radon - Maintainability Index
-    log_info "Running radon (maintainability index)..."
+    # Radon - Cognitive Complexity
+    log_info "Running radon (cognitive complexity)..."
     if ! command -v radon &>/dev/null; then
         log_error "radon not installed"
         log_info "Install with: pip install radon"
         return 1
     fi
 
-    # Just report, don't fail on radon
+    # Check for functions with high cognitive complexity
+    # radon cc outputs complexity metrics; we filter for high values
+    local cc_output
+    cc_output=$(radon cc -s -a "${check_paths[@]}" 2>/dev/null || true)
+
+    if [[ "$VERBOSE" == true ]]; then
+        log_debug "Cognitive Complexity Report:"
+        echo "$cc_output"
+    fi
+
+    # Check for D, E, F grades (complexity > 20)
+    # Allow C-rank (11-20) for workflow orchestration methods (consistent with xenon)
+    if echo "$cc_output" | grep -E "^\s+[A-Z].*\s[DEF]\s" > /dev/null 2>&1; then
+        log_error "radon: Found functions with high cognitive complexity (grade D or worse)"
+        log_info "Functions with grade D (21-50) or worse are too complex and must be refactored"
+        echo "$cc_output" | grep -E "^\s+[A-Z].*\s[DEF]\s" || true
+        ((ERRORS++))
+    else
+        log_success "radon: All functions have acceptable cognitive complexity (A/B/C)"
+    fi
+
+    # Show maintainability index in verbose mode
     if [[ "$VERBOSE" == true ]]; then
         log_debug "Maintainability Index (A=excellent, B=good, C=fair):"
         radon mi -s "${check_paths[@]}" || true
+    fi
+
+    # Vulture - Dead Code Detection
+    log_info "Running vulture (dead code detection)..."
+    if ! command -v vulture &>/dev/null; then
+        log_warn "vulture not installed, skipping dead code check"
+        log_info "Install with: pip install vulture"
+    else
+        local vulture_args=("${check_paths[@]}")
+
+        # Add whitelist if it exists
+        if [[ -f "vulture_whitelist.py" ]]; then
+            vulture_args+=("vulture_whitelist.py")
+            log_debug "Using whitelist: vulture_whitelist.py"
+        fi
+
+        local vulture_output
+        vulture_output=$(vulture --min-confidence "$VULTURE_MIN_CONFIDENCE" "${vulture_args[@]}" 2>&1 || true)
+
+        if [[ -n "$vulture_output" ]]; then
+            log_error "vulture: Dead code detected (confidence >= ${VULTURE_MIN_CONFIDENCE}%)"
+            echo "$vulture_output"
+            log_info "Remove dead code or add to vulture_whitelist.py if false positive"
+            ((ERRORS++))
+        else
+            log_success "vulture: No dead code detected"
+        fi
     fi
 
     # Import Linter - Architectural Boundaries

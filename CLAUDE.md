@@ -211,21 +211,30 @@ pre-commit run complexity --all-files
 
 **What does this check?**
 - **Cyclomatic Complexity** (xenon): Ensures functions aren't too complex
-- **Maintainability Index** (radon): Measures code maintainability
+- **Cognitive Complexity** (radon cc): Measures mental effort to understand code
+- **Dead Code Detection** (vulture): Finds unused code
+- **Maintainability Index** (radon mi): Measures code maintainability
 - **Architectural Boundaries** (import-linter): Prevents layer violations
 - **Module Dependencies** (dependency-cruiser): Prevents circular dependencies (frontend)
 
-**Current Thresholds:**
-- Python: Max complexity D (21-50), targeting C (11-20) - See #70
-- Modules: Max average D (21-50)
-- Overall: Max average B (6-10)
-- Architectural contracts: 5 enforced, see `.importlinter`
+**Current Thresholds (World-Class Standards - Issue #81):**
+- **Python Cyclomatic** (xenon):
+  - Absolute: C (11-20) - Allows workflow orchestration methods
+  - Modules: B (6-10) - Tightened from C
+  - Average: A (1-5) - Tightened from B
+- **Python Cognitive** (radon cc):
+  - Rejects: D+ (>20) - Too complex, must refactor
+  - Allows: A/B/C (1-20) - Acceptable, with C for workflow methods only
+  - Rationale: Workflow orchestration (iterate_ci, handle_reviews) inherently reaches C-rank
+- **Dead Code** (vulture): 0% tolerance (comprehensive whitelist for false positives)
+- **Architectural contracts**: 6 enforced, see `.importlinter`
 
 **If complexity checks fail:**
 1. Read the error message - it shows which function/module is too complex
-2. Consider refactoring: extract methods, reduce nesting, simplify conditionals
-3. See #70 for refactoring guidance
-4. DO NOT suppress warnings - fix the root cause (Rule 1: No Shortcuts)
+2. Consider refactoring: extract helper functions, reduce nesting, simplify conditionals
+3. For workflow methods at C-rank: acceptable if justified by orchestration needs
+4. See #70 (D→C refactoring) and #81 (world-class standards) for guidance
+5. DO NOT suppress warnings - fix the root cause (Rule 1: No Shortcuts)
 
 ### Adding a New Feature
 

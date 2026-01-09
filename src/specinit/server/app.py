@@ -95,7 +95,7 @@ class ProjectConfig(BaseModel):
 
     @field_validator("features")
     @classmethod
-    def validate_features(cls, v: list[str]) -> list[str]:
+    def validate_features(_cls, v: list[str]) -> list[str]:
         """Validate features list constraints."""
         if not v:
             raise ValueError("At least one feature is required")
