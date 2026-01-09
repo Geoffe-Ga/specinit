@@ -1,5 +1,6 @@
-import { useEffect, useState, useRef } from 'react'
 import { Check, Loader2, Circle } from 'lucide-react'
+import { useEffect, useState, useRef } from 'react'
+
 import type { ProjectConfig, GenerationResult, StepProgress } from '../types'
 
 interface GenerationProgressProps {

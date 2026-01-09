@@ -1,14 +1,17 @@
+import { zodResolver } from '@hookform/resolvers/zod'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { PlatformSelector } from './PlatformSelector'
-import { UserStoryInput } from './UserStoryInput'
-import { FeatureList } from './FeatureList'
-import { TechStackSelector } from './TechStackSelector'
-import { AestheticsSelector } from './AestheticsSelector'
-import { GitHubSetup } from './GitHubSetup'
+
 import type { ProjectConfig } from '../types'
+
+import { AestheticsSelector } from './AestheticsSelector'
+import { FeatureList } from './FeatureList'
+import { GitHubSetup } from './GitHubSetup'
+import { PlatformSelector } from './PlatformSelector'
+import { TechStackSelector } from './TechStackSelector'
+import { UserStoryInput } from './UserStoryInput'
+
 
 const projectSchema = z.object({
   name: z.string().min(1, 'Project name is required').max(50),

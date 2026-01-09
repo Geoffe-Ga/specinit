@@ -24,7 +24,7 @@ repos:
         name: complexity (cyclomatic + architectural linting)
         entry: ./scripts/complexity.sh
         language: system
-        types: [python]
+        types_or: [python, javascript, jsx, ts, tsx]
         pass_filenames: false
         require_serial: true
 

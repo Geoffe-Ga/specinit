@@ -267,7 +267,14 @@ check_frontend_complexity() {
     pushd "$frontend_dir" > /dev/null
 
     # Dependency Cruiser - Module Dependencies
-    if [[ -f ".dependency-cruiser.js" ]]; then
+    local depcruise_config=""
+    if [[ -f ".dependency-cruiser.cjs" ]]; then
+        depcruise_config=".dependency-cruiser.cjs"
+    elif [[ -f ".dependency-cruiser.js" ]]; then
+        depcruise_config=".dependency-cruiser.js"
+    fi
+
+    if [[ -n "$depcruise_config" ]]; then
         log_info "Running dependency-cruiser (module dependencies)..."
 
         if [[ ! -d "node_modules" ]]; then
@@ -282,15 +289,15 @@ check_frontend_complexity() {
             esac
         fi
 
-        if npx depcruise --config .dependency-cruiser.js src/; then
+        if npx depcruise --config "$depcruise_config" src/; then
             log_success "dependency-cruiser: No circular dependencies or boundary violations"
         else
             log_error "dependency-cruiser: Module dependency violations detected"
-            log_info "Check .dependency-cruiser.js rules and fix violations"
+            log_info "Check $depcruise_config rules and fix violations"
             ((ERRORS++))
         fi
     else
-        log_debug "No .dependency-cruiser.js config found, skipping dependency-cruiser"
+        log_debug "No .dependency-cruiser.{cjs,js} config found, skipping dependency-cruiser"
     fi
 
     popd > /dev/null

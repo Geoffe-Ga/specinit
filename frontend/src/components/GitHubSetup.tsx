@@ -1,5 +1,6 @@
-import { useState } from 'react'
 import { ExternalLink, Check, AlertCircle, Key } from 'lucide-react'
+import { useState } from 'react'
+
 import type { GitHubConfig } from '../types'
 
 interface GitHubSetupProps {

@@ -1,4 +1,5 @@
 import { CheckCircle, Folder, DollarSign, Clock } from 'lucide-react'
+
 import type { GenerationResult } from '../types'
 
 interface CompletionScreenProps {
