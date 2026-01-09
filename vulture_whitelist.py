@@ -9,6 +9,11 @@ Add items here if vulture reports them as unused but they are:
 2. Used for serialization (Pydantic models)
 3. Part of a public API
 
+IMPORTANT MAINTENANCE NOTE:
+- When removing/renaming code, update this whitelist accordingly
+- Run 'vulture src/' without the whitelist occasionally to verify accuracy
+- Document the reason for each whitelisted item
+
 Issue #81: World-class complexity standards
 """
 
