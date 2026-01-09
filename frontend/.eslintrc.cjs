@@ -24,20 +24,20 @@ module.exports = {
     ],
     '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
 
-    // Complexity rules - start with lenient baselines, tighten incrementally
-    // Current baselines accommodate existing code; see #78 for tightening plan
-    complexity: ['error', { max: 20 }], // Cyclomatic complexity (C-rank)
-    'max-depth': ['error', { max: 4 }], // Nesting depth
+    // Complexity rules - tightened per Issue #78
+    // These thresholds enforce maintainable, well-structured code
+    complexity: ['error', { max: 15 }], // Cyclomatic complexity (reduced from 20)
+    'max-depth': ['error', { max: 4 }], // Nesting depth (unchanged)
     'max-lines': [
       'error',
-      { max: 400, skipBlankLines: true, skipComments: true },
+      { max: 300, skipBlankLines: true, skipComments: true }, // Reduced from 400
     ],
     'max-lines-per-function': [
       'error',
-      { max: 320, skipBlankLines: true, skipComments: true },
+      { max: 150, skipBlankLines: true, skipComments: true }, // Reduced from 320
     ],
-    'max-params': ['error', { max: 5 }], // Function parameters
-    'max-statements': ['error', { max: 25 }],
+    'max-params': ['error', { max: 5 }], // Function parameters (unchanged)
+    'max-statements': ['error', { max: 20 }], // Reduced from 25
 
     // Import organization and boundaries
     'import/no-cycle': 'error', // Circular dependencies
