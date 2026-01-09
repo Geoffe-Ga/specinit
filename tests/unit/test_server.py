@@ -317,6 +317,8 @@ class TestContextVariables:
 
     def test_get_output_dir_returns_cwd_by_default(self):
         """get_output_dir should return cwd when not set."""
+        # Reset to ensure clean state
+        set_output_dir(None)
         result = get_output_dir()
         assert result == Path.cwd()
 
@@ -327,6 +329,9 @@ class TestContextVariables:
 
         result = get_output_dir()
         assert result == test_path
+
+        # Cleanup
+        set_output_dir(None)
 
     def test_get_shutdown_event_returns_none_by_default(self):
         """get_shutdown_event should return None when not set."""

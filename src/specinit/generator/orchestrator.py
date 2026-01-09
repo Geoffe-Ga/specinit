@@ -379,6 +379,9 @@ class GenerationOrchestrator:
         # Parse and write documentation files
         self.file_writer.write_documentation(docs_content)
 
+        # Copy agent profile templates (Issue #101)
+        self.file_writer.write_agent_profiles()
+
     async def _configure_tooling(self, context: dict[str, Any]) -> None:
         """Step 4: Configure developer tooling."""
         prompt = self.prompt_builder.build_tooling_prompt(context)
