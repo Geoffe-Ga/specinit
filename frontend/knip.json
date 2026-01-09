@@ -1,0 +1,5 @@
+{
+  "entry": ["src/main.tsx", "src/App.tsx"],
+  "project": ["src/**/*.{ts,tsx}"],
+  "ignore": ["**/*.test.tsx", "vite.config.ts"]
+}

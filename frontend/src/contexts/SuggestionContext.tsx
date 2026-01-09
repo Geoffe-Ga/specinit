@@ -1,5 +1,4 @@
-/* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useState, useCallback, useMemo } from 'react'
+import { createContext, useState, useCallback, useMemo } from 'react'
 
 // Types
 interface ProjectContext {
@@ -110,15 +109,6 @@ export function SuggestionProvider({ children }: { children: React.ReactNode }) 
   )
 
   return <SuggestionContext.Provider value={value}>{children}</SuggestionContext.Provider>
-}
-
-// Hook to use suggestion context
-export function useSuggestionContext() {
-  const context = useContext(SuggestionContext)
-  if (context === undefined) {
-    throw new Error('useSuggestionContext must be used within a SuggestionProvider')
-  }
-  return context
 }
 
 // Helper functions (extracted to reduce statement count in getSuggestions)

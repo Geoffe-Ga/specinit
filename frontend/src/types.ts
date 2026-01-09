@@ -48,16 +48,6 @@ export interface StepProgress {
   }
 }
 
-export interface IssueProgress {
-  issueNumber: number
-  title: string
-  status: 'queued' | 'in_progress' | 'pr_created' | 'ci_running' | 'ci_failed' | 'in_review' | 'changes_requested' | 'approved' | 'merged' | 'blocked' | 'failed'
-  prNumber?: number
-  prUrl?: string
-  branch?: string
-  commentsResolved?: number
-}
-
 export const PLATFORMS = [
   { id: 'web', label: 'Web', icon: '🌐' },
   { id: 'ios', label: 'iOS', icon: '📱' },

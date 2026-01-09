@@ -42,6 +42,74 @@ interface ProjectFormProps {
   onSubmit: (config: ProjectConfig) => void
 }
 
+interface StepRendererProps {
+  step: number
+  values: ProjectFormData
+  errors: ReturnType<typeof useForm<ProjectFormData>>['formState']['errors']
+  register: ReturnType<typeof useForm<ProjectFormData>>['register']
+  setValue: ReturnType<typeof useForm<ProjectFormData>>['setValue']
+}
+
+function StepRenderer({ step, values, errors, register, setValue }: StepRendererProps) {
+  const stepComponents = {
+    1: (
+      <StepBasics
+        register={register}
+        errors={errors}
+        platforms={values.platforms}
+        projectDescription={values.projectDescription || ''}
+        enableSuggestions={values.enableSuggestions || false}
+        onPlatformsChange={(platforms) => setValue('platforms', platforms)}
+        onSuggestionsToggle={() => setValue('enableSuggestions', !values.enableSuggestions)}
+      />
+    ),
+    2: (
+      <StepUserStory
+        value={values.userStory}
+        onChange={(userStory) => setValue('userStory', userStory)}
+        errors={errors.userStory}
+      />
+    ),
+    3: (
+      <StepFeatures
+        features={values.features}
+        onChange={(features) => setValue('features', features)}
+        error={errors.features?.message}
+      />
+    ),
+    4: (
+      <StepTechStack
+        value={values.techStack}
+        onChange={(techStack) => setValue('techStack', techStack)}
+        platforms={values.platforms}
+      />
+    ),
+    5: (
+      <StepAesthetics
+        selected={values.aesthetics}
+        onChange={(aesthetics) => setValue('aesthetics', aesthetics)}
+        error={errors.aesthetics?.message}
+      />
+    ),
+    6: (
+      <StepGitHub
+        value={values.github}
+        onChange={(github) => setValue('github', github)}
+        projectName={values.name}
+      />
+    ),
+    7: (
+      <StepContext
+        register={register}
+        errors={errors}
+        additionalContext={values.additionalContext || ''}
+      />
+    ),
+  }
+
+  return stepComponents[step as keyof typeof stepComponents] || null
+}
+
 export function ProjectForm({ onSubmit }: ProjectFormProps) {
   const [step, setStep] = useState(1)
 
@@ -69,65 +137,13 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
     <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
       <FormProgressIndicator currentStep={step} totalSteps={TOTAL_STEPS} />
 
-      {step === 1 && (
-        <StepBasics
-          register={register}
-          errors={errors}
-          platforms={currentValues.platforms}
-          projectDescription={currentValues.projectDescription || ''}
-          enableSuggestions={currentValues.enableSuggestions || false}
-          onPlatformsChange={(platforms) => setValue('platforms', platforms)}
-          onSuggestionsToggle={() => setValue('enableSuggestions', !currentValues.enableSuggestions)}
-        />
-      )}
-
-      {step === 2 && (
-        <StepUserStory
-          value={currentValues.userStory}
-          onChange={(userStory) => setValue('userStory', userStory)}
-          errors={errors.userStory}
-        />
-      )}
-
-      {step === 3 && (
-        <StepFeatures
-          features={currentValues.features}
-          onChange={(features) => setValue('features', features)}
-          error={errors.features?.message}
-        />
-      )}
-
-      {step === 4 && (
-        <StepTechStack
-          value={currentValues.techStack}
-          onChange={(techStack) => setValue('techStack', techStack)}
-          platforms={currentValues.platforms}
-        />
-      )}
-
-      {step === 5 && (
-        <StepAesthetics
-          selected={currentValues.aesthetics}
-          onChange={(aesthetics) => setValue('aesthetics', aesthetics)}
-          error={errors.aesthetics?.message}
-        />
-      )}
-
-      {step === 6 && (
-        <StepGitHub
-          value={currentValues.github}
-          onChange={(github) => setValue('github', github)}
-          projectName={currentValues.name}
-        />
-      )}
-
-      {step === 7 && (
-        <StepContext
-          register={register}
-          errors={errors}
-          additionalContext={currentValues.additionalContext || ''}
-        />
-      )}
+      <StepRenderer
+        step={step}
+        values={currentValues}
+        errors={errors}
+        register={register}
+        setValue={setValue}
+      />
 
       <FormNavigation
         currentStep={step}

@@ -10,7 +10,7 @@ module.exports = {
   ],
   ignorePatterns: ['dist', '.eslintrc.cjs', 'coverage'],
   parser: '@typescript-eslint/parser',
-  plugins: ['react-refresh', 'import'],
+  plugins: ['react-refresh', 'import', 'sonarjs'],
   settings: {
     'import/resolver': {
       typescript: true,
@@ -24,20 +24,25 @@ module.exports = {
     ],
     '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
 
-    // Complexity rules - tightened per Issue #78
-    // These thresholds enforce maintainable, well-structured code
-    complexity: ['error', { max: 15 }], // Cyclomatic complexity (reduced from 20)
-    'max-depth': ['error', { max: 4 }], // Nesting depth (unchanged)
+    // Complexity rules - World-class standards per Issue #82
+    // Tightened from Issue #78 to achieve excellence across all frontend code
+    complexity: ['error', { max: 10 }], // Cyclomatic complexity (reduced from 15)
+    'max-depth': ['error', { max: 3 }], // Nesting depth (reduced from 4)
     'max-lines': [
       'error',
-      { max: 300, skipBlankLines: true, skipComments: true }, // Reduced from 400
+      { max: 200, skipBlankLines: true, skipComments: true }, // Reduced from 300
     ],
     'max-lines-per-function': [
       'error',
-      { max: 150, skipBlankLines: true, skipComments: true }, // Reduced from 320
+      { max: 75, skipBlankLines: true, skipComments: true }, // Reduced from 150
     ],
-    'max-params': ['error', { max: 5 }], // Function parameters (unchanged)
-    'max-statements': ['error', { max: 20 }], // Reduced from 25
+    'max-params': ['error', { max: 4 }], // Function parameters (reduced from 5)
+    'max-statements': ['error', { max: 15 }], // Reduced from 20
+
+    // SonarJS code quality rules - Issue #82
+    'sonarjs/cognitive-complexity': ['error', 10],
+    'sonarjs/no-duplicate-string': ['error', { threshold: 3 }],
+    'sonarjs/no-identical-functions': 'error',
 
     // Import organization and boundaries
     'import/no-cycle': 'error', // Circular dependencies
