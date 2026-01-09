@@ -250,6 +250,88 @@ lint_python() {
         log_debug "MyPy not configured, skipping"
     fi
 
+    # Bandit security linting (Issue #86)
+    if python -m bandit --version &>/dev/null; then
+        log_info "Running bandit security linter..."
+        local src_dirs
+        src_dirs=$(get_python_src_dirs)
+        if [[ -n "$src_dirs" ]]; then
+            # shellcheck disable=SC2086
+            if python -m bandit -c pyproject.toml -r $src_dirs -q; then
+                log_success "Bandit security check passed"
+            else
+                log_error "Bandit found security issues"
+                has_errors=true
+            fi
+        fi
+    else
+        log_debug "Bandit not installed, skipping"
+    fi
+
+    # Interrogate docstring coverage (Issue #86)
+    if python -m interrogate --version &>/dev/null; then
+        log_info "Running interrogate docstring coverage..."
+        local src_dirs
+        src_dirs=$(get_python_src_dirs)
+        if [[ -n "$src_dirs" ]]; then
+            # shellcheck disable=SC2086
+            if python -m interrogate -c pyproject.toml $src_dirs; then
+                log_success "Interrogate docstring coverage passed"
+            else
+                log_error "Interrogate found insufficient docstring coverage"
+                has_errors=true
+            fi
+        fi
+    else
+        log_debug "Interrogate not installed, skipping"
+    fi
+
+    # Pydocstyle docstring style (Issue #86)
+    if python -m pydocstyle --version &>/dev/null; then
+        log_info "Running pydocstyle docstring style checker..."
+        local src_dirs
+        src_dirs=$(get_python_src_dirs)
+        if [[ -n "$src_dirs" ]]; then
+            # shellcheck disable=SC2086
+            if python -m pydocstyle --config=pyproject.toml $src_dirs; then
+                log_success "Pydocstyle check passed"
+            else
+                log_error "Pydocstyle found docstring style issues"
+                has_errors=true
+            fi
+        fi
+    else
+        log_debug "Pydocstyle not installed, skipping"
+    fi
+
+    # Tryceratops exception handling (Issue #86)
+    if python -m tryceratops --version &>/dev/null; then
+        log_info "Running tryceratops exception handler checker..."
+        # shellcheck disable=SC2086
+        if python -m tryceratops $python_dirs; then
+            log_success "Tryceratops check passed"
+        else
+            log_error "Tryceratops found exception handling issues"
+            has_errors=true
+        fi
+    else
+        log_debug "Tryceratops not installed, skipping"
+    fi
+
+    # Refurb modern Python suggestions (Issue #86)
+    if python -m refurb --version &>/dev/null; then
+        log_info "Running refurb for modern Python suggestions..."
+        # shellcheck disable=SC2086
+        if python -m refurb $python_dirs; then
+            log_success "Refurb check passed"
+        else
+            log_error "Refurb found opportunities for modernization"
+            has_errors=true
+        fi
+    else
+        log_debug "Refurb not installed, skipping"
+    fi
+
     [[ "$has_errors" == true ]] && ((ERRORS++))
     return 0
 }

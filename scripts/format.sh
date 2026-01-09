@@ -170,6 +170,20 @@ format_python() {
         # shellcheck disable=SC2086
         python -m ruff check --fix $python_dirs 2>/dev/null || true
     fi
+
+    # Pyupgrade - Automatic syntax upgrades to Python 3.11+ (Issue #86)
+    if [[ "$CHECK_ONLY" != true ]] && python -m pyupgrade --version &>/dev/null; then
+        log_info "Upgrading Python syntax with pyupgrade..."
+        # Find all Python files and upgrade them
+        find $python_dirs -name "*.py" -type f -exec python -m pyupgrade --py311-plus {} + 2>/dev/null || true
+    fi
+
+    # Autoflake - Remove unused imports and variables (Issue #86)
+    if [[ "$CHECK_ONLY" != true ]] && python -m autoflake --version &>/dev/null; then
+        log_info "Removing unused imports with autoflake..."
+        # shellcheck disable=SC2086
+        python -m autoflake --in-place --remove-all-unused-imports --remove-unused-variables --recursive $python_dirs 2>/dev/null || true
+    fi
 }
 
 # =============================================================================

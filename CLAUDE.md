@@ -464,6 +464,19 @@ radon          - Cognitive complexity and maintainability metrics
 vulture        - Dead code detection
 import-linter  - Architectural boundary enforcement
 
+# Python world-class quality tools (Issue #86)
+bandit         - Security linting
+safety         - Dependency security scanning
+interrogate    - Docstring coverage enforcement
+pydocstyle     - Docstring style enforcement (Google convention)
+darglint       - Docstring-code consistency checking
+tryceratops    - Exception handling best practices
+refurb         - Modern Python suggestions
+pyupgrade      - Automatic syntax upgrades to Python 3.11+
+autoflake      - Remove unused imports/variables
+dead           - Dead code detection (alternative to vulture)
+commitizen     - Conventional commit validation
+
 # TypeScript/Frontend complexity tools
 eslint-plugin-sonarjs  - Cognitive complexity and code smells
 jscpd                  - Code duplication detection
