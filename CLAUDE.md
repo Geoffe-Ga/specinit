@@ -217,24 +217,39 @@ pre-commit run complexity --all-files
 - **Architectural Boundaries** (import-linter): Prevents layer violations
 - **Module Dependencies** (dependency-cruiser): Prevents circular dependencies (frontend)
 
-**Current Thresholds (World-Class Standards - Issue #81):**
-- **Python Cyclomatic** (xenon):
+**Current Thresholds (World-Class Standards - Issues #81, #82):**
+
+**Python:**
+- **Cyclomatic** (xenon):
   - Absolute: C (11-20) - Allows workflow orchestration methods
   - Modules: B (6-10) - Tightened from C
   - Average: A (1-5) - Tightened from B
-- **Python Cognitive** (radon cc):
+- **Cognitive** (radon cc):
   - Rejects: D+ (>20) - Too complex, must refactor
   - Allows: A/B/C (1-20) - Acceptable, with C for workflow methods only
   - Rationale: Workflow orchestration (iterate_ci, handle_reviews) inherently reaches C-rank
 - **Dead Code** (vulture): 0% tolerance (comprehensive whitelist for false positives)
 - **Architectural contracts**: 6 enforced, see `.importlinter`
 
+**TypeScript/Frontend:**
+- **Cyclomatic** (ESLint complexity): ≤10 (tightened from 15)
+- **Max nesting** (max-depth): ≤3 (tightened from 4)
+- **Max lines/file** (max-lines): ≤200 (tightened from 300)
+- **Max lines/function** (max-lines-per-function): ≤75 (tightened from 150)
+- **Max parameters** (max-params): ≤4 (tightened from 5)
+- **Max statements** (max-statements): ≤15 (tightened from 20)
+- **Cognitive** (sonarjs/cognitive-complexity): ≤10
+- **Duplicate strings** (sonarjs/no-duplicate-string): threshold 3
+- **Code duplication** (jscpd): <3% (currently 0.37%)
+- **Dead code** (knip): 0% unused exports/imports
+
 **If complexity checks fail:**
-1. Read the error message - it shows which function/module is too complex
-2. Consider refactoring: extract helper functions, reduce nesting, simplify conditionals
-3. For workflow methods at C-rank: acceptable if justified by orchestration needs
-4. See #70 (D→C refactoring) and #81 (world-class standards) for guidance
-5. DO NOT suppress warnings - fix the root cause (Rule 1: No Shortcuts)
+1. Read the error message - it shows which function/module/component is too complex
+2. **Python**: Extract helper functions, reduce nesting, simplify conditionals
+3. **TypeScript/React**: Extract custom hooks, split into sub-components, use composition patterns
+4. For Python workflow methods at C-rank: acceptable if justified by orchestration needs
+5. See #70 (D→C refactoring), #81 (Python world-class), #82 (TypeScript world-class) for guidance
+6. DO NOT suppress warnings - fix the root cause (Rule 1: No Shortcuts)
 
 ### Adding a New Feature
 
@@ -442,6 +457,18 @@ ruff           - Linter and formatter
 mypy           - Type checker
 pre-commit     - Git hooks
 httpx          - HTTP client for testing
+
+# Python complexity tools
+xenon          - Cyclomatic complexity checker
+radon          - Cognitive complexity and maintainability metrics
+vulture        - Dead code detection
+import-linter  - Architectural boundary enforcement
+
+# TypeScript/Frontend complexity tools
+eslint-plugin-sonarjs  - Cognitive complexity and code smells
+jscpd                  - Code duplication detection
+knip                   - Dead code and unused exports detection
+dependency-cruiser     - Module dependency analysis
 ```
 
 ## Git Workflow
