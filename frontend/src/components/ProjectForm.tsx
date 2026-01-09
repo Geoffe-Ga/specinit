@@ -1,62 +1,42 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { z } from 'zod'
 
+import { projectSchema, type ProjectFormData } from '../schemas/projectSchema'
 import type { ProjectConfig } from '../types'
 
-import { AestheticsSelector } from './AestheticsSelector'
-import { FeatureList } from './FeatureList'
-import { GitHubSetup } from './GitHubSetup'
-import { PlatformSelector } from './PlatformSelector'
-import { TechStackSelector } from './TechStackSelector'
-import { UserStoryInput } from './UserStoryInput'
+import {
+  StepAesthetics,
+  StepBasics,
+  StepContext,
+  StepFeatures,
+  StepGitHub,
+  StepTechStack,
+  StepUserStory,
+} from './form-steps'
+import { FormNavigation } from './FormNavigation'
+import { FormProgressIndicator } from './FormProgressIndicator'
 
+const TOTAL_STEPS = 7
 
-const projectSchema = z.object({
-  name: z.string().min(1, 'Project name is required').max(50),
-  projectDescription: z
-    .string()
-    .max(500, 'Project description must be less than 500 characters')
-    .optional(),
-  enableSuggestions: z.boolean().optional(),
-  platforms: z.array(z.string()).min(1, 'Select at least one platform'),
-  userStory: z.object({
-    role: z.string().min(3, 'Role must be at least 3 characters'),
-    action: z.string().min(3, 'Action must be at least 3 characters'),
-    outcome: z.string().min(3, 'Outcome must be at least 3 characters'),
-  }),
-  features: z
-    .array(
-      z
-        .string()
-        .trim()
-        .min(1, 'Feature cannot be empty')
-        .max(2000, 'Feature description must be less than 2000 characters')
-    )
-    .min(1, 'Add at least one feature')
-    .max(20, 'Maximum 20 features allowed'),
-  techStack: z.object({
-    frontend: z.array(z.string()),
-    backend: z.array(z.string()),
-    database: z.array(z.string()),
-    tools: z.array(z.string()),
-  }),
-  aesthetics: z.array(z.string()).max(3, 'Select up to 3 aesthetics'),
-  github: z.object({
-    enabled: z.boolean(),
-    repoUrl: z.string(),
-    createRepo: z.boolean(),
-    yoloMode: z.boolean(),
-    tokenConfigured: z.boolean(),
-  }),
-  additionalContext: z
-    .string()
-    .max(10000, 'Additional context must be less than 10,000 characters')
-    .optional(),
-})
-
-type FormData = z.infer<typeof projectSchema>
+const DEFAULT_VALUES: ProjectFormData = {
+  name: '',
+  projectDescription: '',
+  enableSuggestions: false,
+  platforms: [],
+  userStory: { role: '', action: '', outcome: '' },
+  features: [''],
+  techStack: { frontend: [], backend: [], database: [], tools: [] },
+  aesthetics: [],
+  github: {
+    enabled: false,
+    repoUrl: '',
+    createRepo: true,
+    yoloMode: false,
+    tokenConfigured: false,
+  },
+  additionalContext: '',
+}
 
 interface ProjectFormProps {
   onSubmit: (config: ProjectConfig) => void
@@ -64,7 +44,6 @@ interface ProjectFormProps {
 
 export function ProjectForm({ onSubmit }: ProjectFormProps) {
   const [step, setStep] = useState(1)
-  const totalSteps = 7
 
   const {
     register,
@@ -72,333 +51,90 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
     watch,
     setValue,
     formState: { errors },
-  } = useForm<FormData>({
+  } = useForm<ProjectFormData>({
     resolver: zodResolver(projectSchema),
-    defaultValues: {
-      name: '',
-      projectDescription: '',
-      enableSuggestions: false,
-      platforms: [],
-      userStory: { role: '', action: '', outcome: '' },
-      features: [''],
-      techStack: { frontend: [], backend: [], database: [], tools: [] },
-      aesthetics: [],
-      github: {
-        enabled: false,
-        repoUrl: '',
-        createRepo: true,
-        yoloMode: false,
-        tokenConfigured: false,
-      },
-      additionalContext: '',
-    },
+    defaultValues: DEFAULT_VALUES,
   })
 
   const currentValues = watch()
 
-  const handleFormSubmit = (data: FormData) => {
+  const handleFormSubmit = (data: ProjectFormData) => {
     onSubmit(data)
   }
 
-  const nextStep = () => setStep((s) => Math.min(s + 1, totalSteps))
+  const nextStep = () => setStep((s) => Math.min(s + 1, TOTAL_STEPS))
   const prevStep = () => setStep((s) => Math.max(s - 1, 1))
 
   return (
     <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
-      {/* Progress indicator */}
-      <div className="flex items-center justify-between mb-8">
-        {Array.from({ length: totalSteps }, (_, i) => (
-          <div
-            key={i}
-            className={`flex items-center ${i < totalSteps - 1 ? 'flex-1' : ''}`}
-          >
-            <div
-              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium
-                ${step > i + 1 ? 'bg-green-500 text-white' : ''}
-                ${step === i + 1 ? 'bg-blue-600 text-white' : ''}
-                ${step < i + 1 ? 'bg-gray-200 text-gray-600' : ''}`}
-            >
-              {i + 1}
-            </div>
-            {i < totalSteps - 1 && (
-              <div
-                className={`h-1 flex-1 mx-2 ${
-                  step > i + 1 ? 'bg-green-500' : 'bg-gray-200'
-                }`}
-              />
-            )}
-          </div>
-        ))}
-      </div>
+      <FormProgressIndicator currentStep={step} totalSteps={TOTAL_STEPS} />
 
-      {/* Step 1: Project Name & Platforms */}
       {step === 1 && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold mb-4">Project Basics</h2>
-
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Project Name
-            </label>
-            <input
-              {...register('name')}
-              type="text"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="my-awesome-app"
-            />
-            {errors.name && (
-              <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>
-            )}
-          </div>
-
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              What are you building? <span className="text-gray-500 font-normal">(Optional)</span>
-            </label>
-            <textarea
-              {...register('projectDescription')}
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-              placeholder="e.g., A mobile app for tracking daily research notes and progress"
-              maxLength={500}
-            />
-            <div className="flex justify-between items-start mt-1">
-              <p className="text-sm text-gray-500">
-                Provide a brief description of your project idea. This will help us suggest relevant user stories and features.
-              </p>
-              <p className="text-xs text-gray-400 ml-2 whitespace-nowrap">
-                {currentValues.projectDescription?.length || 0}/500
-              </p>
-            </div>
-            {errors.projectDescription && (
-              <p className="mt-1 text-sm text-red-600">{errors.projectDescription.message}</p>
-            )}
-          </div>
-
-          {/* Auto-Suggestions Toggle (Issue #36) */}
-          <div className="mb-6 p-4 border border-gray-200 rounded-lg">
-            <div className="flex items-center justify-between mb-3">
-              <label className="text-sm font-medium text-gray-700">
-                Enable Auto-Suggestions
-              </label>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={currentValues.enableSuggestions}
-                onClick={() => setValue('enableSuggestions', !currentValues.enableSuggestions)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                  currentValues.enableSuggestions ? 'bg-blue-600' : 'bg-gray-200'
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    currentValues.enableSuggestions ? 'translate-x-6' : 'translate-x-1'
-                  }`}
-                />
-              </button>
-            </div>
-
-            {!currentValues.enableSuggestions ? (
-              // Information panel when OFF
-              <div className="space-y-3">
-                <p className="text-sm text-gray-600">
-                  Get AI-powered suggestions for user stories, features, tech stack, and more as you fill out the form.
-                </p>
-
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-gray-700">Benefits:</p>
-                  <ul className="text-sm text-gray-600 space-y-1">
-                    <li className="flex items-start">
-                      <span className="mr-2">✨</span>
-                      <span>Faster project setup</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="mr-2">🎯</span>
-                      <span>Comprehensive feature suggestions</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="mr-2">🔧</span>
-                      <span>Proven tech stack recommendations</span>
-                    </li>
-                  </ul>
-                </div>
-
-                <div className="pt-2 border-t border-gray-200">
-                  <p className="text-sm text-gray-700">
-                    <span className="font-medium">Estimated cost:</span>{' '}
-                    <span className="text-gray-600">$0.05 - $0.15 per session</span>
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Uses your configured Claude API key
-                  </p>
-                </div>
-              </div>
-            ) : (
-              // Active indicator when ON
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-blue-600">✨ Auto-Suggestions Active</span>
-                </div>
-                <p className="text-sm text-gray-600">
-                  Session cost so far: <span className="font-medium">$0.00</span>
-                </p>
-                <p className="text-xs text-gray-500">
-                  Suggestions will use your Claude API key
-                </p>
-              </div>
-            )}
-          </div>
-
-          <PlatformSelector
-            selected={currentValues.platforms}
-            onChange={(platforms) => setValue('platforms', platforms)}
-            error={errors.platforms?.message}
-          />
-        </div>
+        <StepBasics
+          register={register}
+          errors={errors}
+          platforms={currentValues.platforms}
+          projectDescription={currentValues.projectDescription || ''}
+          enableSuggestions={currentValues.enableSuggestions || false}
+          onPlatformsChange={(platforms) => setValue('platforms', platforms)}
+          onSuggestionsToggle={() => setValue('enableSuggestions', !currentValues.enableSuggestions)}
+        />
       )}
 
-      {/* Step 2: User Story */}
       {step === 2 && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold mb-4">User Story</h2>
-          <p className="text-gray-600 mb-4">
-            Describe your project's main purpose using the classic user story format.
-          </p>
-
-          <UserStoryInput
-            value={currentValues.userStory}
-            onChange={(userStory) => setValue('userStory', userStory)}
-            errors={errors.userStory}
-          />
-        </div>
+        <StepUserStory
+          value={currentValues.userStory}
+          onChange={(userStory) => setValue('userStory', userStory)}
+          errors={errors.userStory}
+        />
       )}
 
-      {/* Step 3: Features */}
       {step === 3 && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold mb-4">Features</h2>
-          <p className="text-gray-600 mb-4">
-            Add up to 20 features for your project.
-          </p>
-
-          <FeatureList
-            features={currentValues.features}
-            onChange={(features) => setValue('features', features)}
-            error={errors.features?.message}
-          />
-        </div>
+        <StepFeatures
+          features={currentValues.features}
+          onChange={(features) => setValue('features', features)}
+          error={errors.features?.message}
+        />
       )}
 
-      {/* Step 4: Tech Stack */}
       {step === 4 && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold mb-4">Tech Stack</h2>
-          <p className="text-gray-600 mb-4">
-            Select the technologies for your project.
-          </p>
-
-          <TechStackSelector
-            value={currentValues.techStack}
-            onChange={(techStack) => setValue('techStack', techStack)}
-            platforms={currentValues.platforms}
-          />
-        </div>
+        <StepTechStack
+          value={currentValues.techStack}
+          onChange={(techStack) => setValue('techStack', techStack)}
+          platforms={currentValues.platforms}
+        />
       )}
 
-      {/* Step 5: Aesthetics */}
       {step === 5 && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold mb-4">UX Aesthetics</h2>
-          <p className="text-gray-600 mb-4">
-            Select up to 3 aesthetic principles for your project.
-          </p>
-
-          <AestheticsSelector
-            selected={currentValues.aesthetics}
-            onChange={(aesthetics) => setValue('aesthetics', aesthetics)}
-            error={errors.aesthetics?.message}
-          />
-        </div>
+        <StepAesthetics
+          selected={currentValues.aesthetics}
+          onChange={(aesthetics) => setValue('aesthetics', aesthetics)}
+          error={errors.aesthetics?.message}
+        />
       )}
 
-      {/* Step 6: GitHub Integration */}
       {step === 6 && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold mb-4">GitHub Integration</h2>
-          <p className="text-gray-600 mb-4">
-            Choose how you want SpecInit to generate your project. GitHub Mode creates
-            issues, branches, and PRs for better tracking and accuracy.
-          </p>
-
-          <GitHubSetup
-            value={currentValues.github}
-            onChange={(github) => setValue('github', github)}
-            projectName={currentValues.name}
-          />
-        </div>
+        <StepGitHub
+          value={currentValues.github}
+          onChange={(github) => setValue('github', github)}
+          projectName={currentValues.name}
+        />
       )}
 
-      {/* Step 7: Additional Context (Optional) */}
       {step === 7 && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold mb-4">Additional Context (Optional)</h2>
-          <p className="text-gray-600 mb-4">
-            Provide any additional context, requirements, or constraints for your project.
-            This can include detailed specifications, architectural preferences, or domain-specific information.
-          </p>
-
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Additional Context
-            </label>
-            <textarea
-              {...register('additionalContext')}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y min-h-[200px]"
-              placeholder="Example: This project should follow Clean Architecture principles. The authentication system must support OAuth2 and JWT tokens. All API responses should follow the JSON:API specification..."
-            />
-            <p className="mt-1 text-sm text-gray-500">
-              {currentValues.additionalContext?.length || 0} / 10,000 characters
-              {currentValues.additionalContext && currentValues.additionalContext.length > 5000 && (
-                <span className="ml-2 text-amber-600">
-                  Note: Large amounts of context may increase generation costs
-                </span>
-              )}
-            </p>
-            {errors.additionalContext && (
-              <p className="mt-1 text-sm text-red-600">{errors.additionalContext.message}</p>
-            )}
-          </div>
-        </div>
+        <StepContext
+          register={register}
+          errors={errors}
+          additionalContext={currentValues.additionalContext || ''}
+        />
       )}
 
-      {/* Navigation buttons */}
-      <div className="flex justify-between">
-        <button
-          type="button"
-          onClick={prevStep}
-          disabled={step === 1}
-          className="px-4 py-2 text-gray-600 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Previous
-        </button>
-
-        {step < totalSteps ? (
-          <button
-            type="button"
-            onClick={nextStep}
-            className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-          >
-            Next
-          </button>
-        ) : (
-          <button
-            type="submit"
-            className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-          >
-            Generate Project
-          </button>
-        )}
-      </div>
+      <FormNavigation
+        currentStep={step}
+        totalSteps={TOTAL_STEPS}
+        onPrevious={prevStep}
+        onNext={nextStep}
+      />
     </form>
   )
 }
