@@ -65,9 +65,9 @@ START_TIME=$(date +%s)
 # E: Unmaintainable (51-100)
 # F: Extremely unmaintainable (>100)
 
-# Current thresholds - start lenient, tighten over time
-XENON_MAX_ABSOLUTE="D"  # Max complexity for any single block
-XENON_MAX_MODULES="D"   # Max average complexity per module
+# Current thresholds - refactored D-ranked functions to C-rank (Issue #70)
+XENON_MAX_ABSOLUTE="C"  # Max complexity for any single block
+XENON_MAX_MODULES="C"   # Max average complexity per module
 XENON_MAX_AVERAGE="B"   # Max average complexity overall
 
 # =============================================================================

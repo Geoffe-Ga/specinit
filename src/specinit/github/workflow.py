@@ -823,6 +823,108 @@ Create comprehensive integration tests for all features.
 
         workflow_issue.status = IssueStatus.CI_FAILED
 
+    async def _ensure_ci_stable_for_review(
+        self,
+        workflow_issue: WorkflowIssue,
+        implementation_callback: Callable[[Issue], Coroutine[Any, Any, None]],
+        progress_callback: ProgressCallback | None,
+    ) -> bool:
+        """Ensure CI is stable before checking reviews.
+
+        Args:
+            workflow_issue: The workflow issue being processed
+            implementation_callback: Callback to re-implement on CI failure
+            progress_callback: Optional callback for progress updates
+
+        Returns:
+            True if CI is stable (passed), False if CI failed after retries
+        """
+        # Critical Issue #2 Fix: Verify CI is stable before checking reviews
+        if workflow_issue.status == IssueStatus.CI_RUNNING:
+            await self._wait_for_ci(workflow_issue, progress_callback)
+
+        # Check if CI failed after waiting
+        if workflow_issue.status == IssueStatus.CI_FAILED:
+            ci_success = await self._iterate_ci(
+                workflow_issue, implementation_callback, progress_callback
+            )
+            if not ci_success:
+                workflow_issue.status = IssueStatus.FAILED
+                return False
+
+        return True
+
+    def _evaluate_review_approval(
+        self,
+        reviews: list[dict[str, Any]],
+        comments: list[dict[str, Any]],
+    ) -> tuple[bool, bool, list[str], bool, list[dict[str, Any]]]:
+        """Evaluate review approval status.
+
+        Args:
+            reviews: List of PR reviews
+            comments: List of PR comments
+
+        Returns:
+            Tuple of (human_approved, claude_approved, claude_feedback,
+                     changes_requested, unresolved_comments)
+        """
+        # Check for human approvals
+        human_approved = any(r.get("state") == "APPROVED" for r in reviews)
+
+        # Check for Claude Code review status (if enabled)
+        claude_approved = True
+        claude_feedback: list[str] = []
+        if self.config.claude_code_review:
+            claude_approved, claude_feedback = self._check_claude_code_review(reviews, comments)
+
+        # Check for change requests from any reviewer
+        changes_requested = any(r.get("state") == "CHANGES_REQUESTED" for r in reviews)
+        unresolved_comments = [c for c in comments if not c.get("resolved", False)]
+
+        return (
+            human_approved,
+            claude_approved,
+            claude_feedback,
+            changes_requested,
+            unresolved_comments,
+        )
+
+    async def _report_review_fixing(
+        self,
+        workflow_issue: WorkflowIssue,
+        unresolved_comments: list[dict[str, Any]],
+        claude_feedback: list[str],
+        claude_approved: bool,
+        progress_callback: ProgressCallback | None,
+    ) -> None:
+        """Report progress on fixing review feedback.
+
+        Args:
+            workflow_issue: The workflow issue being processed
+            unresolved_comments: List of unresolved PR comments
+            claude_feedback: List of Claude Code feedback items
+            claude_approved: Whether Claude Code approved the PR
+            progress_callback: Optional callback for progress updates
+        """
+        if progress_callback:
+            await progress_callback(
+                f"issue_{workflow_issue.issue.number}",
+                "review_fixing",
+                {
+                    "attempt": workflow_issue.fix_attempts,
+                    "max_attempts": self.config.max_fix_attempts,
+                    "human_comments": len(
+                        [
+                            c
+                            for c in unresolved_comments
+                            if c.get("user", {}).get("login") != "claude-code"
+                        ]
+                    ),
+                    "claude_comments": len(claude_feedback) if not claude_approved else 0,
+                },
+            )
+
     async def _handle_reviews(
         self,
         workflow_issue: WorkflowIssue,
@@ -847,41 +949,29 @@ Create comprehensive integration tests for all features.
             return
 
         while workflow_issue.fix_attempts < self.config.max_fix_attempts:
-            # Critical Issue #2 Fix: Verify CI is stable before checking reviews
-            # This prevents race condition where we check reviews while CI is still running
-            if workflow_issue.status == IssueStatus.CI_RUNNING:
-                await self._wait_for_ci(workflow_issue, progress_callback)
-
-            # Check if CI failed after waiting (status was modified by _wait_for_ci)
-            if workflow_issue.status == IssueStatus.CI_FAILED:
-                ci_success = await self._iterate_ci(
-                    workflow_issue, implementation_callback, progress_callback
-                )
-                if not ci_success:
-                    workflow_issue.status = IssueStatus.FAILED
-                    return
+            # Ensure CI is stable before checking reviews
+            if not await self._ensure_ci_stable_for_review(
+                workflow_issue, implementation_callback, progress_callback
+            ):
+                return
 
             # Get reviews and comments
             reviews = self.github.get_pr_reviews(self.config.owner, self.config.repo, pr.number)
             comments = self.github.get_pr_comments(self.config.owner, self.config.repo, pr.number)
 
-            # Check for human approvals
-            human_approved = any(r.get("state") == "APPROVED" for r in reviews)
-
-            # Check for Claude Code review status (if enabled)
-            claude_approved = True
-            claude_feedback: list[str] = []
-            if self.config.claude_code_review:
-                claude_approved, claude_feedback = self._check_claude_code_review(reviews, comments)
+            # Evaluate review approval status
+            (
+                human_approved,
+                claude_approved,
+                claude_feedback,
+                changes_requested,
+                unresolved_comments,
+            ) = self._evaluate_review_approval(reviews, comments)
 
             # If all reviewers approve, we're done
             if human_approved and claude_approved:
                 workflow_issue.status = IssueStatus.APPROVED
                 return
-
-            # Check for change requests from any reviewer
-            changes_requested = any(r.get("state") == "CHANGES_REQUESTED" for r in reviews)
-            unresolved_comments = [c for c in comments if not c.get("resolved", False)]
 
             # Include Claude Code feedback as unresolved if not approved
             if self.config.claude_code_review and not claude_approved:
@@ -895,26 +985,18 @@ Create comprehensive integration tests for all features.
                 workflow_issue.status = IssueStatus.APPROVED
                 return
 
+            # Update status and increment fix attempts
             workflow_issue.status = IssueStatus.REVIEW_FIXING
             workflow_issue.fix_attempts += 1
 
-            if progress_callback:
-                await progress_callback(
-                    f"issue_{workflow_issue.issue.number}",
-                    "review_fixing",
-                    {
-                        "attempt": workflow_issue.fix_attempts,
-                        "max_attempts": self.config.max_fix_attempts,
-                        "human_comments": len(
-                            [
-                                c
-                                for c in unresolved_comments
-                                if c.get("user", {}).get("login") != "claude-code"
-                            ]
-                        ),
-                        "claude_comments": len(claude_feedback) if not claude_approved else 0,
-                    },
-                )
+            # Report progress
+            await self._report_review_fixing(
+                workflow_issue,
+                unresolved_comments,
+                claude_feedback,
+                claude_approved,
+                progress_callback,
+            )
 
             if workflow_issue.fix_attempts >= self.config.max_fix_attempts:
                 workflow_issue.status = IssueStatus.FAILED

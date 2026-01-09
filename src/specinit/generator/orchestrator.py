@@ -543,6 +543,116 @@ Generated with SpecInit
         if any(char in repo_url for char in dangerous_chars):
             raise ValueError("URL contains unsafe shell characters")
 
+    async def _report_github_status(
+        self,
+        progress_callback: ProgressCallback | None,
+        status: str,
+        message: str,
+    ) -> None:
+        """Report GitHub setup progress status.
+
+        Args:
+            progress_callback: Optional callback for progress updates
+            status: Status type (in_progress, completed, failed, skipped)
+            message: Status message to display
+        """
+        if progress_callback:
+            await progress_callback("github_setup", status, {"name": message})
+
+    async def _get_validated_github_token(
+        self, progress_callback: ProgressCallback | None
+    ) -> str | None:
+        """Get and validate GitHub token from keyring.
+
+        Args:
+            progress_callback: Optional callback for progress updates
+
+        Returns:
+            GitHub token if found and valid, None otherwise
+        """
+        token = GitHubService.get_token()
+        if not token and progress_callback:
+            await self._report_github_status(
+                progress_callback,
+                "skipped",
+                "GitHub token not found - please run: specinit config",
+            )
+        return token
+
+    async def _get_validated_repo_url(
+        self,
+        github_config: dict[str, Any],
+        progress_callback: ProgressCallback | None,
+    ) -> str | None:
+        """Get and validate repository URL from config.
+
+        Args:
+            github_config: GitHub configuration dictionary
+            progress_callback: Optional callback for progress updates
+
+        Returns:
+            Validated repository URL, or None if invalid/missing
+        """
+        repo_url: str = github_config.get("repo_url", "")
+        if not repo_url:
+            await self._report_github_status(
+                progress_callback, "skipped", "No repository URL provided"
+            )
+            return None
+
+        # Security validation - prevent command injection and malicious URLs
+        try:
+            self._validate_repo_url(repo_url)
+        except ValueError as e:
+            await self._report_github_status(
+                progress_callback, "failed", f"Invalid repository URL: {e}"
+            )
+            return None
+
+        return repo_url
+
+    async def _create_repo_if_needed(
+        self,
+        github: GitHubService,
+        owner: str,
+        repo_name: str,
+        context: dict[str, Any],
+        github_config: dict[str, Any],
+        progress_callback: ProgressCallback | None,
+    ) -> bool:
+        """Create GitHub repository if requested and it doesn't exist.
+
+        Args:
+            github: GitHub service instance
+            owner: Repository owner
+            repo_name: Repository name
+            context: Project context dictionary
+            github_config: GitHub configuration dictionary
+            progress_callback: Optional callback for progress updates
+
+        Returns:
+            True if successful or not needed, False if creation failed
+        """
+        if not github_config.get("create_repo", False):
+            return True
+
+        try:
+            if not github.repo_exists(owner, repo_name):
+                github.create_repo(
+                    name=repo_name,
+                    description=f"{context['project_name']} - "
+                    f"As {context['user_story']['role']}, "
+                    f"I want to {context['user_story']['action']}",
+                    private=github_config.get("private", False),
+                )
+        except Exception as e:
+            await self._report_github_status(
+                progress_callback, "failed", f"Failed to create repository: {e}"
+            )
+            return False
+
+        return True
+
     async def _github_integration(
         self, context: dict[str, Any], progress_callback: ProgressCallback | None
     ) -> None:
@@ -560,45 +670,19 @@ Generated with SpecInit
         if not github_config:
             return
 
-        if progress_callback:
-            await progress_callback(
-                "github_setup", "in_progress", {"name": "Setting up GitHub repository"}
-            )
+        await self._report_github_status(
+            progress_callback, "in_progress", "Setting up GitHub repository"
+        )
 
         try:
-            # Get GitHub token from keyring
-            token = GitHubService.get_token()
+            # Get and validate GitHub token
+            token = await self._get_validated_github_token(progress_callback)
             if not token:
-                # Token was supposed to be validated earlier, but handle gracefully
-                if progress_callback:
-                    await progress_callback(
-                        "github_setup",
-                        "skipped",
-                        {"name": "GitHub token not found - please run: specinit config"},
-                    )
                 return
 
-            # Parse and validate repo URL first (before creating service)
-            repo_url = github_config.get("repo_url", "")
+            # Get and validate repository URL
+            repo_url = await self._get_validated_repo_url(github_config, progress_callback)
             if not repo_url:
-                if progress_callback:
-                    await progress_callback(
-                        "github_setup",
-                        "skipped",
-                        {"name": "No repository URL provided"},
-                    )
-                return
-
-            # Security validation - prevent command injection and malicious URLs
-            try:
-                self._validate_repo_url(repo_url)
-            except ValueError as e:
-                if progress_callback:
-                    await progress_callback(
-                        "github_setup",
-                        "failed",
-                        {"name": f"Invalid repository URL: {e}"},
-                    )
                 return
 
             # Use context manager to ensure session cleanup
@@ -607,56 +691,35 @@ Generated with SpecInit
                 try:
                     owner, repo_name = github.parse_repo_url(repo_url)
                 except ValueError as e:
-                    if progress_callback:
-                        await progress_callback(
-                            "github_setup",
-                            "failed",
-                            {"name": f"Invalid repository URL: {e}"},
-                        )
+                    await self._report_github_status(
+                        progress_callback, "failed", f"Invalid repository URL: {e}"
+                    )
                     return
 
                 # Create repository if requested and doesn't exist
-                if github_config.get("create_repo", False):
-                    try:
-                        if not github.repo_exists(owner, repo_name):
-                            github.create_repo(
-                                name=repo_name,
-                                description=f"{context['project_name']} - "
-                                f"As {context['user_story']['role']}, "
-                                f"I want to {context['user_story']['action']}",
-                                private=github_config.get("private", False),
-                            )
-                    except Exception as e:
-                        if progress_callback:
-                            await progress_callback(
-                                "github_setup",
-                                "failed",
-                                {"name": f"Failed to create repository: {e}"},
-                            )
-                        return
+                if not await self._create_repo_if_needed(
+                    github, owner, repo_name, context, github_config, progress_callback
+                ):
+                    return
 
                 # Set up git remote and push initial commit
                 try:
                     await asyncio.to_thread(self._setup_github_remote_and_push, repo_url, token)
                 except (subprocess.CalledProcessError, RuntimeError) as e:
-                    if progress_callback:
-                        await progress_callback(
-                            "github_setup",
-                            "failed",
-                            {"name": f"Failed to push to GitHub: {e}"},
-                        )
+                    await self._report_github_status(
+                        progress_callback, "failed", f"Failed to push to GitHub: {e}"
+                    )
                     return
 
-                # Create issues from product spec (unless YOLO mode which handles this differently)
+                # Create issues from product spec (unless YOLO mode)
                 if not github_config.get("yolo_mode", False):
                     await self._create_github_issues(github, owner, repo_name, context)
 
-                if progress_callback:
-                    await progress_callback(
-                        "github_setup",
-                        "completed",
-                        {"name": "GitHub repository configured and issues created"},
-                    )
+                await self._report_github_status(
+                    progress_callback,
+                    "completed",
+                    "GitHub repository configured and issues created",
+                )
 
         except (
             requests.exceptions.RequestException,
@@ -665,12 +728,11 @@ Generated with SpecInit
         ) as e:
             logger = logging.getLogger(__name__)
             logger.error("GitHub integration failed: %s", e, exc_info=True)
-            if progress_callback:
-                await progress_callback(
-                    "github_setup",
-                    "failed",
-                    {"name": "GitHub integration failed: check your network connection"},
-                )
+            await self._report_github_status(
+                progress_callback,
+                "failed",
+                "GitHub integration failed: check your network connection",
+            )
             # Don't fail the whole generation if GitHub integration fails
             return
 

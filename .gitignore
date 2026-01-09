@@ -55,6 +55,7 @@ htmlcov/
 .nox/
 coverage.xml
 *.cover
+frontend/coverage/
 
 # MyPy
 .mypy_cache/
