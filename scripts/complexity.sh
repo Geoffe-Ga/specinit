@@ -363,6 +363,47 @@ check_frontend_complexity() {
         log_debug "No .dependency-cruiser.{cjs,js} config found, skipping dependency-cruiser"
     fi
 
+    # jscpd - Code Duplication Detection (Issue #82)
+    if [[ -f ".jscpd.json" ]]; then
+        log_info "Running jscpd (code duplication detection)..."
+
+        local jscpd_output
+        jscpd_output=$(npx jscpd src --config .jscpd.json 2>&1 || true)
+
+        # Check if duplication exceeds threshold (3%)
+        # jscpd exits with non-zero if threshold is exceeded
+        if echo "$jscpd_output" | grep -q "threshold exceeded"; then
+            log_error "jscpd: Code duplication exceeds 3% threshold"
+            echo "$jscpd_output"
+            log_info "Refactor duplicated code into shared utilities or components"
+            ((ERRORS++))
+        else
+            log_success "jscpd: Code duplication under 3% threshold"
+        fi
+    else
+        log_debug "No .jscpd.json config found, skipping jscpd"
+    fi
+
+    # knip - Dead Code Detection (Issue #82)
+    if [[ -f "knip.json" ]]; then
+        log_info "Running knip (dead code detection)..."
+
+        # knip exits with 1 if unused exports/dependencies found
+        # These devDependencies are used (in configs, scripts), but knip doesn't detect that usage
+        # eslint-plugin-sonarjs: Used in .eslintrc.cjs
+        # jscpd: Used in complexity.sh script
+        if npx knip 2>&1 | grep -qE "Unused exports|Unused exported types" ; then
+            log_error "knip: Unused exports or types detected"
+            npx knip 2>&1 | grep -v "Unused devDependencies" || true
+            log_info "Remove dead code or update knip.json whitelist if false positive"
+            ((ERRORS++))
+        else
+            log_success "knip: No dead code detected (ignoring devDependencies used in configs)"
+        fi
+    else
+        log_debug "No knip.json config found, skipping knip"
+    fi
+
     popd > /dev/null
 }
 

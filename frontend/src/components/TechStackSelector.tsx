@@ -6,6 +6,46 @@ interface TechStackSelectorProps {
   platforms: string[]
 }
 
+// Shared className constants for tech selection buttons
+const SELECTED_CLASS = 'bg-blue-600 text-white'
+const UNSELECTED_CLASS = 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+
+interface CategorySectionProps {
+  title: string
+  category: keyof TechStack
+  options: string[]
+  selectedOptions: string[]
+  onToggle: (category: keyof TechStack, option: string) => void
+}
+
+function CategorySection({
+  title,
+  category,
+  options,
+  selectedOptions,
+  onToggle,
+}: CategorySectionProps) {
+  return (
+    <div>
+      <h3 className="text-sm font-medium text-gray-700 mb-2">{title}</h3>
+      <div className="flex flex-wrap gap-2">
+        {options.map((tech) => (
+          <button
+            key={tech}
+            type="button"
+            onClick={() => onToggle(category, tech)}
+            className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              selectedOptions.includes(tech) ? SELECTED_CLASS : UNSELECTED_CLASS
+            }`}
+          >
+            {tech}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function TechStackSelector({ value, onChange, platforms }: TechStackSelectorProps) {
   const toggleOption = (category: keyof TechStack, option: string) => {
     const current = value[category]
@@ -20,93 +60,41 @@ export function TechStackSelector({ value, onChange, platforms }: TechStackSelec
 
   return (
     <div className="space-y-6">
-      {/* Frontend */}
       {showFrontend && (
-        <div>
-          <h3 className="text-sm font-medium text-gray-700 mb-2">Frontend</h3>
-          <div className="flex flex-wrap gap-2">
-            {TECH_OPTIONS.frontend.map((tech) => (
-              <button
-                key={tech}
-                type="button"
-                onClick={() => toggleOption('frontend', tech)}
-                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  value.frontend.includes(tech)
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {tech}
-              </button>
-            ))}
-          </div>
-        </div>
+        <CategorySection
+          title="Frontend"
+          category="frontend"
+          options={TECH_OPTIONS.frontend}
+          selectedOptions={value.frontend}
+          onToggle={toggleOption}
+        />
       )}
 
-      {/* Backend */}
       {showBackend && (
-        <div>
-          <h3 className="text-sm font-medium text-gray-700 mb-2">Backend</h3>
-          <div className="flex flex-wrap gap-2">
-            {TECH_OPTIONS.backend.map((tech) => (
-              <button
-                key={tech}
-                type="button"
-                onClick={() => toggleOption('backend', tech)}
-                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  value.backend.includes(tech)
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {tech}
-              </button>
-            ))}
-          </div>
-        </div>
+        <CategorySection
+          title="Backend"
+          category="backend"
+          options={TECH_OPTIONS.backend}
+          selectedOptions={value.backend}
+          onToggle={toggleOption}
+        />
       )}
 
-      {/* Database */}
-      <div>
-        <h3 className="text-sm font-medium text-gray-700 mb-2">Database</h3>
-        <div className="flex flex-wrap gap-2">
-          {TECH_OPTIONS.database.map((tech) => (
-            <button
-              key={tech}
-              type="button"
-              onClick={() => toggleOption('database', tech)}
-              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                value.database.includes(tech)
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              {tech}
-            </button>
-          ))}
-        </div>
-      </div>
+      <CategorySection
+        title="Database"
+        category="database"
+        options={TECH_OPTIONS.database}
+        selectedOptions={value.database}
+        onToggle={toggleOption}
+      />
 
-      {/* Tools */}
-      <div>
-        <h3 className="text-sm font-medium text-gray-700 mb-2">Tools</h3>
-        <div className="flex flex-wrap gap-2">
-          {TECH_OPTIONS.tools.map((tech) => (
-            <button
-              key={tech}
-              type="button"
-              onClick={() => toggleOption('tools', tech)}
-              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                value.tools.includes(tech)
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              {tech}
-            </button>
-          ))}
-        </div>
-      </div>
+      <CategorySection
+        title="Tools"
+        category="tools"
+        options={TECH_OPTIONS.tools}
+        selectedOptions={value.tools}
+        onToggle={toggleOption}
+      />
     </div>
   )
 }
