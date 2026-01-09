@@ -68,7 +68,7 @@ class GitHubService:
         """Enter context manager."""
         return self
 
-    def __exit__(self, *args: object) -> None:
+    def __exit__(self, *_args: object) -> None:
         """Exit context manager and close session."""
         self.close()
 
