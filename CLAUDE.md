@@ -458,6 +458,15 @@ mypy           - Type checker
 pre-commit     - Git hooks
 httpx          - HTTP client for testing
 
+# Advanced testing infrastructure (Issue #88)
+hypothesis         - Property-based testing
+mutmut             - Mutation testing
+pytest-benchmark   - Performance benchmarking
+pytest-snapshot    - Snapshot testing
+pytest-timeout     - Prevent hanging tests
+pytest-randomly    - Detect test interdependencies (disabled by default)
+pytest-xdist       - Parallel test execution
+
 # Python complexity tools
 xenon          - Cyclomatic complexity checker
 radon          - Cognitive complexity and maintainability metrics
