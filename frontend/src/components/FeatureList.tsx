@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
 import { X, Plus } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+
 import { useSuggestionContext } from '../contexts/SuggestionContext'
 
 interface FeatureListProps {
