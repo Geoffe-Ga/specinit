@@ -63,6 +63,13 @@ export function TechStackSelector({ value, onChange, platforms }: TechStackSelec
     }
   }, [])
 
+  // Reset hasFetchedRef when suggestionsEnabled changes to allow re-triggering
+  useEffect(() => {
+    if (!suggestionsEnabled) {
+      hasFetchedRef.current = false
+    }
+  }, [suggestionsEnabled])
+
   const handleGetSuggestions = useCallback(async () => {
     setShowSuggestions(true)
     setError(null)
@@ -110,15 +117,14 @@ export function TechStackSelector({ value, onChange, platforms }: TechStackSelec
     // Try to categorize the suggestion based on TECH_OPTIONS
     // Categorization uses substring matching: if suggestion contains a known tech name,
     // it's added to that tech's category (e.g., "React Router" → frontend if "React" is in frontend list)
+    // Uses case-insensitive substring matching to handle hyphenated names (e.g., "vue-router" matches "Vue")
     let category: keyof TechStack | null = null
 
     for (const [cat, options] of Object.entries(TECH_OPTIONS)) {
       const match = options.some((opt) => {
-        // Escape special regex characters to handle tech names like "Next.js" or "C++"
-        const escaped = opt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-        // Use word boundaries for whole-word matching to avoid false positives
-        const regex = new RegExp(`\\b${escaped}\\b`, 'i')
-        return regex.test(suggestion)
+        // Use substring matching instead of word boundaries to handle hyphenated tech names
+        // This allows "vue-router" to match "Vue", "React Testing Library" to match "React", etc.
+        return suggestion.toLowerCase().includes(opt.toLowerCase())
       })
       if (match) {
         category = cat as keyof TechStack
