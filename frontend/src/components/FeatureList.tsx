@@ -16,6 +16,7 @@ export function FeatureList({ features, onChange, error }: FeatureListProps) {
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [selectedIndices, setSelectedIndices] = useState<number[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
+  const [suggestionError, setSuggestionError] = useState<string | null>(null)
   const hasFetchedRef = useRef(false)
   const isMountedRef = useRef(true)
 
@@ -47,10 +48,19 @@ export function FeatureList({ features, onChange, error }: FeatureListProps) {
 
   const handleGetSuggestions = useCallback(async () => {
     setShowSuggestions(true)
-    const results = await getSuggestions('features')
-    if (isMountedRef.current) {
-      setSuggestions(results)
-      setSelectedIndices([])
+    setSuggestionError(null)
+    try {
+      const results = await getSuggestions('features')
+      if (isMountedRef.current) {
+        setSuggestions(results)
+        setSelectedIndices([])
+      }
+    } catch (err) {
+      if (isMountedRef.current) {
+        const message = err instanceof Error ? err.message : 'Failed to fetch feature suggestions'
+        setSuggestionError(message)
+        setSuggestions([])
+      }
     }
   }, [getSuggestions])
 
@@ -84,10 +94,19 @@ export function FeatureList({ features, onChange, error }: FeatureListProps) {
   }
 
   const handleGetMore = useCallback(async () => {
-    const results = await getSuggestions('features')
-    if (isMountedRef.current) {
-      setSuggestions(results)
-      setSelectedIndices([])
+    setSuggestionError(null)
+    try {
+      const results = await getSuggestions('features')
+      if (isMountedRef.current) {
+        setSuggestions(results)
+        setSelectedIndices([])
+      }
+    } catch (err) {
+      if (isMountedRef.current) {
+        const message = err instanceof Error ? err.message : 'Failed to fetch feature suggestions'
+        setSuggestionError(message)
+        setSuggestions([])
+      }
     }
   }, [getSuggestions])
 
@@ -103,8 +122,43 @@ export function FeatureList({ features, onChange, error }: FeatureListProps) {
         </div>
       )}
 
+      {/* Error State */}
+      {suggestionsEnabled && showSuggestions && suggestionError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-start gap-2">
+            <span className="text-red-600" aria-hidden="true">❌</span>
+            <div className="flex-1">
+              <p className="text-sm font-medium text-red-800">Failed to fetch suggestions</p>
+              <p className="text-xs text-red-600 mt-1">{suggestionError}</p>
+              <p className="text-xs text-red-600 mt-1">
+                Check your internet connection and API key configuration.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2 mt-3">
+            <button
+              type="button"
+              onClick={handleGetSuggestions}
+              disabled={isLoading}
+              className="py-2 px-4 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Retry fetching suggestions"
+            >
+              {isLoading ? 'Retrying...' : 'Try again'}
+            </button>
+            <button
+              type="button"
+              onClick={handleSkipAll}
+              className="py-2 px-4 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+              aria-label="Dismiss error and continue manually"
+            >
+              Continue manually
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Empty Suggestions State */}
-      {suggestionsEnabled && showSuggestions && !isLoading && suggestions.length === 0 && (
+      {suggestionsEnabled && showSuggestions && !isLoading && suggestions.length === 0 && !suggestionError && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
           <p className="text-sm text-yellow-800">
             <span aria-hidden="true">⚠️</span> No suggestions available at this time.
