@@ -78,6 +78,7 @@ class TestConfigManager:
     def test_update_usage_increments_stats(self, _mock_home: Path) -> None:
         """Usage update should increment project count and cost."""
         config = ConfigManager()
+        config.reset()  # Reset to ensure clean state
 
         config.update_usage(cost=1.50)
         config.update_usage(cost=2.00)

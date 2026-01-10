@@ -93,8 +93,8 @@ class FileWriter:
 
     def write_agent_profiles(self) -> None:
         """Copy agent profile templates to .claude/profiles/ directory."""
-        # Get templates directory
-        templates_dir = Path(__file__).parent.parent.parent / "templates" / "agent-profiles"
+        # Get templates directory (project root is 4 parents up from this file)
+        templates_dir = Path(__file__).parent.parent.parent.parent / "templates" / "agent-profiles"
 
         if not templates_dir.exists():
             return

@@ -138,6 +138,47 @@ def test_main():
         assert result["valid"] is False
         assert "plan/" in result["missing_dirs"]
 
+    def test_write_agent_profiles_creates_directory(self, temp_dir):
+        """write_agent_profiles should create .claude/profiles/ directory."""
+        writer = FileWriter(temp_dir)
+
+        writer.write_agent_profiles()
+
+        profiles_dir = temp_dir / ".claude" / "profiles"
+        assert profiles_dir.exists()
+        assert profiles_dir.is_dir()
+
+    def test_write_agent_profiles_copies_all_markdown_files(self, temp_dir):
+        """write_agent_profiles should copy all .md files from templates."""
+        writer = FileWriter(temp_dir)
+
+        writer.write_agent_profiles()
+
+        profiles_dir = temp_dir / ".claude" / "profiles"
+        # Verify expected files exist
+        assert (profiles_dir / "quality-reviewer.md").exists()
+        assert (profiles_dir / "test-generator.md").exists()
+        assert (profiles_dir / "security-auditor.md").exists()
+        assert (profiles_dir / "README.md").exists()
+
+    def test_write_agent_profiles_copies_file_content_correctly(self, temp_dir):
+        """write_agent_profiles should preserve file content."""
+        writer = FileWriter(temp_dir)
+
+        writer.write_agent_profiles()
+
+        # Check that quality-reviewer.md has expected content
+        quality_reviewer = temp_dir / ".claude" / "profiles" / "quality-reviewer.md"
+        content = quality_reviewer.read_text()
+        assert "Quality Reviewer Agent Profile" in content
+        assert "world-class engineering standards" in content
+
+        # Check that README.md has expected content
+        readme = temp_dir / ".claude" / "profiles" / "README.md"
+        content = readme.read_text()
+        assert "Claude Agent Profiles" in content
+        assert "Available Profiles" in content
+
 
 class TestPathValidation:
     """Tests for path traversal protection in FileWriter (Issue #18)."""
