@@ -119,6 +119,7 @@ ignore = [
     "PLR2004", # magic value comparison (too noisy)
     "PLR0911", # too many return statements (workflow methods have complex logic)
     "PLR0912", # too many branches (workflow methods have complex state handling)
+    "PLC0415", # import outside top-level - intentional for lazy imports
     "S603",    # subprocess call - we use literal strings, not user input
     "S607",    # partial executable path - intentional for git/npm commands
     "S105",    # "token" in variable names isn't hardcoded passwords
@@ -241,10 +242,11 @@ exclude = ["tests", ".venv", "venv"]
 
 [tool.refurb]
 # Modern Python suggestions
+# FURB143: "x or []" pattern is intentional for default values
 # FURB184: Assignment chaining is often less readable
 # FURB115: len() checks are sometimes clearer than boolean checks
 # FURB149: Explicit boolean comparison is sometimes clearer
-ignore = ["FURB184", "FURB115", "FURB149"]
+ignore = ["FURB143", "FURB184", "FURB115", "FURB149"]
 
 # =============================================================================
 # Advanced Testing Infrastructure Configuration (Issue #88)
