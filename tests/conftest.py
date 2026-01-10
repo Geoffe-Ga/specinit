@@ -14,12 +14,13 @@ from hypothesis import Verbosity, settings
 # Hypothesis Configuration (Issue #88)
 # =============================================================================
 
-# Register Hypothesis profiles for different testing modes
+# Register Hypothesis profiles (matches pyproject.toml [tool.hypothesis.profiles.*])
+# Note: Hypothesis requires programmatic registration; pyproject.toml defines the default
 settings.register_profile("ci", max_examples=100, verbosity=Verbosity.verbose)
 settings.register_profile("dev", max_examples=10, verbosity=Verbosity.normal)
 settings.register_profile("debug", max_examples=1000, verbosity=Verbosity.debug)
 
-# Load the appropriate profile from environment variable (default to dev)
+# Load profile from environment variable (default to dev)
 profile = os.getenv("HYPOTHESIS_PROFILE", "dev")
 settings.load_profile(profile)
 

@@ -182,10 +182,18 @@ generate_html() {
 }
 
 show_mutant() {
-    log_step "Showing Mutant $MUTANT_ID"
+    log_step "Applying Mutant"
+
+    # Validate MUTANT_ID is provided
+    if [[ -z "$MUTANT_ID" ]]; then
+        log_error "MUTANT_ID is required for --apply action"
+        log_info "Usage: $0 --apply <mutant_id>"
+        return "$EXIT_INVALID_ARGS"
+    fi
 
     activate_venv || return 1
 
+    log_info "Applying mutant: $MUTANT_ID"
     python -m mutmut apply "$MUTANT_ID"
 }
 
