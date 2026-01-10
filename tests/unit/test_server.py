@@ -30,10 +30,11 @@ def _mock_config_manager():
     with patch("specinit.server.app.ConfigManager") as mock:
         instance = MagicMock()
         instance.get_api_key.return_value = "sk-ant-test-key"
-        instance.get.side_effect = lambda key: {
+        config_dict = {
             "api.model": "claude-sonnet-4-5-20250929",
             "preferences.cost_limit": 5.00,
-        }.get(key)
+        }
+        instance.get.side_effect = config_dict.get
         mock.return_value = instance
         yield instance
 
@@ -282,7 +283,7 @@ class TestServeFrontend:
             # This is expected behavior - it will return 404 or serve fallback
             response = client.get("/")
             # We just verify it doesn't crash
-            assert response.status_code in [200, 404]
+            assert response.status_code in (200, 404)
 
 
 class TestWebSocketJSONParsing:
@@ -316,6 +317,8 @@ class TestContextVariables:
 
     def test_get_output_dir_returns_cwd_by_default(self):
         """get_output_dir should return cwd when not set."""
+        # Reset to ensure clean state
+        set_output_dir(None)
         result = get_output_dir()
         assert result == Path.cwd()
 
@@ -326,6 +329,9 @@ class TestContextVariables:
 
         result = get_output_dir()
         assert result == test_path
+
+        # Cleanup
+        set_output_dir(None)
 
     def test_get_shutdown_event_returns_none_by_default(self):
         """get_shutdown_event should return None when not set."""
@@ -556,7 +562,7 @@ class TestAdditionalContext:
 
                 response = websocket.receive_json()
                 # Should not error - should process successfully
-                assert response["type"] in ["progress", "complete"]
+                assert response["type"] in ("progress", "complete")
 
 
 class TestProjectDescription:

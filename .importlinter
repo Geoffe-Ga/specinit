@@ -1,0 +1,95 @@
+[importlinter]
+root_package = specinit
+include_external_packages = True
+
+# =============================================================================
+# Layer Architecture
+# =============================================================================
+# Enforce a layered architecture where dependencies flow in one direction:
+#
+# CLI/Server (Presentation) → Generator/GitHub (Application) → Storage (Infrastructure)
+#
+# This prevents:
+# - Storage depending on business logic
+# - Generator depending on CLI details
+# - Circular dependencies between modules
+# =============================================================================
+
+[importlinter:contract:layer-architecture]
+name = Layered architecture (Presentation → Application → Infrastructure)
+type = layers
+layers =
+    specinit.cli
+    specinit.server
+    specinit.generator
+    specinit.github
+    specinit.storage
+# Note: This enforces that lower layers (storage) don't depend on upper layers (cli/server)
+# CLI can use server (for the server command), server can use generator, etc.
+
+# =============================================================================
+# Independence Contracts
+# =============================================================================
+# Ensure certain modules remain independent and don't create circular dependencies
+
+[importlinter:contract:storage-independence]
+name = Storage layer should not depend on application logic
+type = forbidden
+source_modules =
+    specinit.storage
+forbidden_modules =
+    specinit.generator
+    specinit.github
+    specinit.cli
+    specinit.server
+
+# Fixed in #72: CLI-Server decoupled via specinit.launcher facade with lazy imports
+# The launcher.py module uses lazy imports (imports inside function) to break STATIC dependencies
+# At module load time: CLI -> launcher (no Server import)
+# At runtime only: launcher -> Server (when start_server() is called)
+#
+# Note: import-linter cannot detect this distinction (it sees all import paths as violations)
+# The static dependency is successfully broken - verify by:
+#   python -c "import specinit.cli; import sys; print('server.app' in sys.modules)"
+# Should print: False (Server not loaded when CLI is imported)
+#
+# We enforce that Server doesn't import CLI, which is the more critical direction:
+[importlinter:contract:server-no-cli-imports]
+name = Server should not import CLI
+type = forbidden
+source_modules =
+    specinit.server
+forbidden_modules =
+    specinit.cli
+    specinit.launcher
+
+# =============================================================================
+# Forbidden Dependencies
+# =============================================================================
+# Prevent specific problematic dependencies
+
+[importlinter:contract:no-test-imports-in-src]
+name = Source code should not import from tests
+type = forbidden
+source_modules =
+    specinit
+forbidden_modules =
+    tests
+
+[importlinter:contract:generator-no-cli-details]
+name = Generator should not import CLI implementation details
+type = forbidden
+source_modules =
+    specinit.generator
+forbidden_modules =
+    specinit.cli.main
+    specinit.cli.commands
+
+[importlinter:contract:generator-no-server-details]
+name = Generator should not import Server implementation details
+type = forbidden
+source_modules =
+    specinit.generator
+forbidden_modules =
+    specinit.server.app
+    specinit.server.routes

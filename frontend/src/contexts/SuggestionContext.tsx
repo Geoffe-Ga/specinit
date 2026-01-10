@@ -1,5 +1,4 @@
-/* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useState, useCallback, useMemo } from 'react'
+import { createContext, useState, useCallback, useMemo } from 'react'
 
 // Types
 interface ProjectContext {
@@ -23,19 +22,12 @@ interface ProjectContext {
 }
 
 interface SuggestionContextType {
-  // Accumulated form data
   context: ProjectContext
   updateContext: (field: string, value: unknown) => void
-
-  // Suggestion state
   suggestionsEnabled: boolean
   setSuggestionsEnabled: (enabled: boolean) => void
-
-  // Cost tracking
   totalCost: number
   addCost: (cost: number) => void
-
-  // Suggestion fetching
   getSuggestions: (field: string, currentValue?: string) => Promise<string[]>
   isLoading: boolean
 }
@@ -47,12 +39,17 @@ interface SuggestionCache {
   }
 }
 
-// Create context
-const SuggestionContext = createContext<SuggestionContextType | undefined>(undefined)
+interface SuggestionResponse {
+  suggestions: string[]
+  cost?: number
+}
 
-// Cache TTL (5 minutes)
+// Constants
 const CACHE_TTL_MS = 5 * 60 * 1000
 const MAX_CACHE_SIZE = 20
+
+// Create context
+const SuggestionContext = createContext<SuggestionContextType | undefined>(undefined)
 
 // Provider component
 export function SuggestionProvider({ children }: { children: React.ReactNode }) {
@@ -62,132 +59,41 @@ export function SuggestionProvider({ children }: { children: React.ReactNode }) 
   const [isLoading, setIsLoading] = useState(false)
   const [suggestionCache, setSuggestionCache] = useState<SuggestionCache>({})
 
-  // Update context with debouncing handled by the caller
   const updateContext = useCallback((field: string, value: unknown) => {
-    setContext((prev) => ({
-      ...prev,
-      [field]: value,
-    }))
+    setContext((prev) => ({ ...prev, [field]: value }))
   }, [])
 
-  // Add cost to running total
   const addCost = useCallback((cost: number) => {
     setTotalCost((prev) => prev + cost)
   }, [])
 
-  // Generate cache key from field and context
-  const getCacheKey = useCallback((field: string, ctx: ProjectContext): string => {
-    // Create normalized context (exclude undefined, sort keys)
-    const normalized: Record<string, unknown> = {}
-    Object.keys(ctx)
-      .sort()
-      .forEach((key) => {
-        const value = ctx[key as keyof ProjectContext]
-        if (value !== undefined) {
-          normalized[key] = value
-        }
-      })
-    return `${field}:${JSON.stringify(normalized)}`
-  }, [])
-
-  // Clean expired cache entries
-  const cleanCache = useCallback(() => {
-    const now = Date.now()
-    setSuggestionCache((prev) => {
-      const cleaned: SuggestionCache = {}
-      const entries = Object.entries(prev)
-
-      // Keep only non-expired entries
-      entries.forEach(([key, value]) => {
-        if (now - value.timestamp < CACHE_TTL_MS) {
-          cleaned[key] = value
-        }
-      })
-
-      // If still over max size, keep only most recent
-      if (Object.keys(cleaned).length > MAX_CACHE_SIZE) {
-        const sorted = Object.entries(cleaned).sort(
-          ([, a], [, b]) => b.timestamp - a.timestamp
-        )
-        const limited: SuggestionCache = {}
-        sorted.slice(0, MAX_CACHE_SIZE).forEach(([key, value]) => {
-          limited[key] = value
-        })
-        return limited
-      }
-
-      return cleaned
-    })
-  }, [])
-
-  // Fetch suggestions from API
   const getSuggestions = useCallback(
     async (field: string, currentValue: string = ''): Promise<string[]> => {
       if (!suggestionsEnabled) {
         return []
       }
 
-      // Check cache first
-      const cacheKey = getCacheKey(field, context)
-      const cached = suggestionCache[cacheKey]
-      if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-        return cached.suggestions
+      const cacheKey = buildCacheKey(field, context)
+      const cached = getCachedSuggestions(suggestionCache, cacheKey)
+      if (cached) {
+        return cached
       }
 
       setIsLoading(true)
       try {
-        // Call backend API
-        const response = await fetch('/api/suggest', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            field,
-            context,
-            current_value: currentValue,
-            count: 5,
-          }),
-        })
-
-        if (!response.ok) {
-          const error = await response.json()
-          throw new Error(error.detail || 'Failed to fetch suggestions')
-        }
-
-        const data = await response.json()
-        const suggestions = data.suggestions || []
-
-        // Update cost
-        if (data.cost) {
-          addCost(data.cost)
-        }
-
-        // Cache the result
-        setSuggestionCache((prev) => ({
-          ...prev,
-          [cacheKey]: {
-            suggestions,
-            timestamp: Date.now(),
-          },
-        }))
-
-        // Clean cache periodically
-        cleanCache()
-
-        return suggestions
+        const response = await fetchSuggestionsFromApi(field, context, currentValue)
+        updateCacheAndCost(response, cacheKey, addCost, setSuggestionCache)
+        return response.suggestions
       } catch (error) {
         console.error('Error fetching suggestions:', error)
-        // Return empty array on error, don't throw
         return []
       } finally {
         setIsLoading(false)
       }
     },
-    [suggestionsEnabled, context, suggestionCache, getCacheKey, addCost, cleanCache]
+    [suggestionsEnabled, context, suggestionCache, addCost]
   )
 
-  // Provide context value
   const value = useMemo(
     () => ({
       context,
@@ -199,26 +105,92 @@ export function SuggestionProvider({ children }: { children: React.ReactNode }) 
       getSuggestions,
       isLoading,
     }),
-    [
-      context,
-      updateContext,
-      suggestionsEnabled,
-      setSuggestionsEnabled,
-      totalCost,
-      addCost,
-      getSuggestions,
-      isLoading,
-    ]
+    [context, updateContext, suggestionsEnabled, totalCost, addCost, getSuggestions, isLoading]
   )
 
   return <SuggestionContext.Provider value={value}>{children}</SuggestionContext.Provider>
 }
 
-// Hook to use suggestion context
-export function useSuggestionContext() {
-  const context = useContext(SuggestionContext)
-  if (context === undefined) {
-    throw new Error('useSuggestionContext must be used within a SuggestionProvider')
+// Helper functions (extracted to reduce statement count in getSuggestions)
+
+function buildCacheKey(field: string, ctx: ProjectContext): string {
+  const normalized: Record<string, unknown> = {}
+  Object.keys(ctx)
+    .sort()
+    .forEach((key) => {
+      const value = ctx[key as keyof ProjectContext]
+      if (value !== undefined) {
+        normalized[key] = value
+      }
+    })
+  return `${field}:${JSON.stringify(normalized)}`
+}
+
+function getCachedSuggestions(cache: SuggestionCache, cacheKey: string): string[] | null {
+  const cached = cache[cacheKey]
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return cached.suggestions
   }
-  return context
+  return null
+}
+
+async function fetchSuggestionsFromApi(
+  field: string,
+  context: ProjectContext,
+  currentValue: string
+): Promise<SuggestionResponse> {
+  const response = await fetch('/api/suggest', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ field, context, current_value: currentValue, count: 5 }),
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || 'Failed to fetch suggestions')
+  }
+
+  const data = await response.json()
+  return { suggestions: data.suggestions || [], cost: data.cost }
+}
+
+function updateCacheAndCost(
+  response: SuggestionResponse,
+  cacheKey: string,
+  addCost: (cost: number) => void,
+  setCache: React.Dispatch<React.SetStateAction<SuggestionCache>>
+): void {
+  if (response.cost) {
+    addCost(response.cost)
+  }
+
+  setCache((prev) => {
+    const updated = {
+      ...prev,
+      [cacheKey]: { suggestions: response.suggestions, timestamp: Date.now() },
+    }
+    return cleanAndLimitCache(updated)
+  })
+}
+
+function cleanAndLimitCache(cache: SuggestionCache): SuggestionCache {
+  const now = Date.now()
+  const cleaned: SuggestionCache = {}
+
+  Object.entries(cache).forEach(([key, value]) => {
+    if (now - value.timestamp < CACHE_TTL_MS) {
+      cleaned[key] = value
+    }
+  })
+
+  if (Object.keys(cleaned).length <= MAX_CACHE_SIZE) {
+    return cleaned
+  }
+
+  const sorted = Object.entries(cleaned).sort(([, a], [, b]) => b.timestamp - a.timestamp)
+  const limited: SuggestionCache = {}
+  sorted.slice(0, MAX_CACHE_SIZE).forEach(([key, value]) => {
+    limited[key] = value
+  })
+  return limited
 }

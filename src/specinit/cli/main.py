@@ -8,7 +8,7 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from specinit import __version__
-from specinit.server.app import start_server
+from specinit.launcher import start_server
 from specinit.storage.config import ConfigManager
 from specinit.storage.history import HistoryManager
 
@@ -38,7 +38,6 @@ def cli() -> None:
 
     Transform your project ideas into working codebases in minutes.
     """
-    pass
 
 
 @cli.command()
@@ -158,7 +157,6 @@ def list(limit: int) -> None:
 @cli.group()
 def config() -> None:
     """Manage SpecInit configuration."""
-    pass
 
 
 @config.command("show")

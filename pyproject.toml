@@ -44,11 +44,37 @@ dev = [
     "pytest-cov>=4.1.0",
     "pytest-asyncio>=0.23.0",
     "httpx>=0.26.0",
+    # Advanced testing infrastructure (Issue #88)
+    "hypothesis>=6.0.0",  # Property-based testing
+    "mutmut>=2.4.0",  # Mutation testing
+    "pytest-benchmark>=4.0.0",  # Performance benchmarks
+    "pytest-snapshot>=0.9.0",  # Snapshot testing
+    "pytest-timeout>=2.2.0",  # Prevent hanging tests
+    "pytest-randomly>=3.15.0",  # Detect test interdependencies
+    "pytest-xdist>=3.5.0",  # Parallel test execution
     "mypy>=1.8.0",
     "ruff>=0.2.0",
     "pre-commit>=3.6.0",
     "types-requests>=2.31.0",
     "types-PyYAML>=6.0.0",
+    # Complexity and architectural linters
+    "xenon>=0.9.0",
+    "radon>=6.0.0",
+    "import-linter>=2.0",
+    # World-class complexity tools (Issue #81)
+    "vulture>=2.10",  # Dead code detection
+    # World-class quality tools (Issue #86)
+    "bandit[toml]>=1.7.0",  # Security linting
+    "safety>=3.0.0",  # Dependency security scanning
+    "interrogate>=1.5.0",  # Docstring coverage
+    "pydocstyle[toml]>=6.3.0",  # Docstring style (Google convention)
+    "darglint>=1.8.0",  # Docstring-code consistency
+    "tryceratops>=2.3.0",  # Exception handling best practices
+    "refurb>=1.0.0",  # Modern Python suggestions
+    "pyupgrade>=3.0.0",  # Automatic syntax upgrades
+    "autoflake>=2.0.0",  # Remove unused imports/variables
+    "dead>=1.5.0",  # Dead code detection (alternative to vulture)
+    "commitizen>=3.0.0",  # Conventional commit validation
 ]
 
 [project.scripts]
@@ -93,6 +119,7 @@ ignore = [
     "PLR2004", # magic value comparison (too noisy)
     "PLR0911", # too many return statements (workflow methods have complex logic)
     "PLR0912", # too many branches (workflow methods have complex state handling)
+    "PLC0415", # import outside top-level - intentional for lazy imports
     "S603",    # subprocess call - we use literal strings, not user input
     "S607",    # partial executable path - intentional for git/npm commands
     "S105",    # "token" in variable names isn't hardcoded passwords
@@ -127,7 +154,17 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-addopts = "-v --cov=src/specinit --cov-report=term-missing"
+addopts = "-v --cov=src/specinit --cov-report=term-missing --hypothesis-seed=0 -p no:randomly"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "e2e: marks tests as end-to-end tests",
+    "property: marks tests as property-based tests",
+    "snapshot: marks tests as snapshot tests",
+    "benchmark: marks tests as performance benchmarks",
+]
+timeout = 300  # 5 minutes max per test
+# Note: To enable test randomization (detect test interdependencies), remove -p no:randomly
 
 [tool.coverage.run]
 source = ["src/specinit"]
@@ -147,3 +184,95 @@ fail_under = 90
 # Logic-heavy modules: 90%+
 # Frontend/UI: 60%+ (realistic for UI components)
 # See scripts/test.sh for enforcement
+
+# =============================================================================
+# World-Class Quality Tools Configuration (Issue #86)
+# =============================================================================
+
+[tool.bandit]
+# Security linting - skip low-severity issues we already handle via ruff
+exclude_dirs = ["tests", ".venv", "venv", "build", "dist", "examples"]
+# B101: assert usage (already handled by ruff S101, OK in runtime code)
+# B404/B603/B607: subprocess usage (already reviewed and safe in our context)
+# B608: SQL injection - false positive, field names are from hardcoded allowed_fields set
+skips = ["B101", "B404", "B603", "B607", "B608"]
+
+[tool.interrogate]
+# Docstring coverage enforcement - targeting 95%
+ignore-init-method = false
+ignore-init-module = true
+ignore-magic = false
+ignore-semiprivate = false
+ignore-private = false
+ignore-property-decorators = false
+ignore-module = false
+ignore-nested-functions = false
+ignore-nested-classes = false
+ignore-setters = false
+fail-under = 95
+exclude = ["setup.py", "docs", "build", "dist", ".venv", "venv"]
+verbose = 2
+color = true
+
+[tool.pydocstyle]
+# Google-style docstring enforcement
+convention = "google"
+add-ignore = []
+match = "(?!test_).*\\.py"  # Skip test files
+match-dir = "(?!tests|\\.|__pycache__|venv|\\.venv|build|dist)"
+
+[tool.commitizen]
+# Conventional commit message validation
+name = "cz_conventional_commits"
+version = "1.0.0"
+tag_format = "v$version"
+version_files = [
+    "pyproject.toml:version"
+]
+update_changelog_on_bump = true
+
+[tool.tryceratops]
+# Exception handling best practices
+# TRY003: Allow inline exception messages (common pattern)
+# TRY300: else-after-try is often clearer than extracting
+# TRY301: Abstract raise is sometimes overly prescriptive
+# TRY400: logging.exception vs logging.error - stylistic preference, can improve gradually
+ignore = ["TRY003", "TRY300", "TRY301", "TRY400"]
+exclude = ["tests", ".venv", "venv"]
+
+[tool.refurb]
+# Modern Python suggestions
+# FURB143: "x or []" pattern is intentional for default values
+# FURB184: Assignment chaining is often less readable
+# FURB115: len() checks are sometimes clearer than boolean checks
+# FURB149: Explicit boolean comparison is sometimes clearer
+ignore = ["FURB143", "FURB184", "FURB115", "FURB149"]
+
+# =============================================================================
+# Advanced Testing Infrastructure Configuration (Issue #88)
+# =============================================================================
+
+[tool.hypothesis]
+# Property-based testing configuration
+max_examples = 100
+derandomize = true
+# deadline is disabled by default
+
+[tool.hypothesis.profiles.dev]
+max_examples = 10
+verbosity = "normal"
+
+[tool.hypothesis.profiles.ci]
+max_examples = 100
+verbosity = "verbose"
+
+[tool.hypothesis.profiles.debug]
+max_examples = 1000
+verbosity = "debug"
+
+[tool.mutmut]
+# Mutation testing configuration
+paths_to_mutate = "src/"
+backup = false
+runner = "pytest -x --tb=short -q"
+tests_dir = "tests/"

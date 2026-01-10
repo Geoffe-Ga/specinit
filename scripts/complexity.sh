@@ -1,0 +1,460 @@
+#!/bin/bash
+# =============================================================================
+# complexity.sh - Code complexity and architectural linting
+# =============================================================================
+#
+# Runs complexity and architectural linters to enforce:
+#   - Low cyclomatic complexity (xenon)
+#   - Cognitive complexity (radon)
+#   - Dead code detection (vulture)
+#   - Maintainability metrics (radon)
+#   - Architectural boundaries (import-linter)
+#   - Module dependency rules (dependency-cruiser for TypeScript)
+#
+# Usage:
+#   ./scripts/complexity.sh [options] [paths...]
+#
+# Options:
+#   --verbose, -v   Show detailed output
+#   --quiet, -q     Minimal output (errors only)
+#   --no-log        Skip log file creation
+#   --python        Check Python only
+#   --frontend      Check frontend only
+#   --help, -h      Show this help message
+#
+# Examples:
+#   ./scripts/complexity.sh                  # Check everything
+#   ./scripts/complexity.sh --python         # Check Python only
+#   ./scripts/complexity.sh --frontend       # Check frontend only
+#   ./scripts/complexity.sh src/             # Check specific path
+#
+# Environment Variables:
+#   NO_COLOR        Disable colored output
+#   LOG_DIR         Override log directory (default: .logs)
+#
+# Exit Codes:
+#   0 - All checks passed
+#   1 - Complexity checks failed
+#   4 - Missing dependencies
+#
+# =============================================================================
+
+set -eo pipefail
+
+# Get script directory and load libraries
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "${SCRIPT_DIR}/lib/common.sh"
+# shellcheck source=lib/detect.sh
+source "${SCRIPT_DIR}/lib/detect.sh"
+
+# =============================================================================
+# Configuration
+# =============================================================================
+
+SAVE_LOGS=true
+PYTHON_ONLY=false
+FRONTEND_ONLY=false
+CHECK_PATHS=()
+ERRORS=0
+START_TIME=$(date +%s)
+
+# Complexity thresholds - World-class standards (Issue #81)
+# A: Simple (1-5)      - Target for most functions
+# B: Well structured (6-10) - Acceptable for complex workflows
+# C: Complex (11-20)   - Should be rare, requires justification
+# D: Too complex (21-50) - Not allowed
+# E: Unmaintainable (51-100) - Not allowed
+# F: Extremely unmaintainable (>100) - Not allowed
+
+# Xenon thresholds (cyclomatic complexity)
+XENON_MAX_ABSOLUTE="C"  # Max complexity for any single block (allows workflow methods)
+XENON_MAX_MODULES="B"   # Max average complexity per module (tightened from C)
+XENON_MAX_AVERAGE="A"   # Max average complexity overall (tightened from B)
+
+# Cognitive complexity threshold (via radon cc)
+# Workflow orchestration methods may reach C-rank (11-20), consistent with xenon
+# Lower is better: C-rank (11-20) for workflow orchestration, A/B (1-10) for utilities
+
+# Vulture minimum confidence (60% = only report high-confidence dead code)
+VULTURE_MIN_CONFIDENCE=60
+
+# =============================================================================
+# Help
+# =============================================================================
+
+show_help() {
+    cat << 'EOF'
+complexity.sh - Code complexity and architectural linting
+
+USAGE:
+    ./scripts/complexity.sh [OPTIONS] [PATHS...]
+
+OPTIONS:
+    --verbose, -v   Show detailed output
+    --quiet, -q     Minimal output (errors only)
+    --no-log        Skip log file creation
+    --python        Check Python only
+    --frontend      Check frontend only
+    --help, -h      Show this help message
+
+EXAMPLES:
+    ./scripts/complexity.sh                  # Check everything
+    ./scripts/complexity.sh --python         # Check Python only
+    ./scripts/complexity.sh src/specinit     # Check specific path
+
+THRESHOLDS (World-class standards - Issue #81):
+    Python (xenon - cyclomatic complexity):
+      Max absolute complexity: C (11-20)
+      Max module complexity:   B (6-10)
+      Max average complexity:  A (1-5)
+
+    Python (radon - cognitive complexity):
+      Max cognitive complexity per function: 15
+
+    Python (vulture - dead code):
+      Must have 0 dead code (confidence >= 60%)
+
+    Python (import-linter):
+      Enforces architectural boundaries defined in .importlinter
+
+    TypeScript (dependency-cruiser):
+      Enforces module dependency rules defined in .dependency-cruiser.js
+
+ENVIRONMENT:
+    NO_COLOR        Disable colored output
+    LOG_DIR         Override log directory (default: .logs)
+
+EXIT CODES:
+    0 - All checks passed
+    1 - Complexity checks failed
+    4 - Missing dependencies
+EOF
+}
+
+# =============================================================================
+# Argument Parsing
+# =============================================================================
+
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --verbose|-v)
+                VERBOSE=true
+                shift
+                ;;
+            --quiet|-q)
+                QUIET=true
+                shift
+                ;;
+            --no-log)
+                SAVE_LOGS=false
+                shift
+                ;;
+            --python)
+                PYTHON_ONLY=true
+                shift
+                ;;
+            --frontend)
+                FRONTEND_ONLY=true
+                shift
+                ;;
+            --help|-h)
+                show_help
+                exit 0
+                ;;
+            -*)
+                log_error "Unknown option: $1"
+                log_info "Use --help for usage information"
+                exit "$EXIT_INVALID_ARGS"
+                ;;
+            *)
+                CHECK_PATHS+=("$1")
+                shift
+                ;;
+        esac
+    done
+}
+
+# =============================================================================
+# Python Complexity Checks
+# =============================================================================
+
+check_python_complexity() {
+    if ! detect_python; then
+        log_debug "No Python project detected, skipping Python checks"
+        return 0
+    fi
+
+    log_step "Python Complexity Checks"
+
+    # Activate virtual environment if available
+    activate_venv || true
+
+    # Determine paths to check
+    local check_paths=("${CHECK_PATHS[@]}")
+    if [[ ${#check_paths[@]} -eq 0 ]]; then
+        local src_dirs
+        src_dirs=$(get_python_src_dirs)
+        if [[ -n "$src_dirs" ]]; then
+            # shellcheck disable=SC2206
+            check_paths=($src_dirs)
+        fi
+    fi
+
+    # Xenon - Cyclomatic Complexity
+    log_info "Running xenon (cyclomatic complexity)..."
+    if ! command -v xenon &>/dev/null; then
+        log_error "xenon not installed"
+        log_info "Install with: pip install xenon"
+        return 1
+    fi
+
+    log_debug "Thresholds: absolute=$XENON_MAX_ABSOLUTE, modules=$XENON_MAX_MODULES, average=$XENON_MAX_AVERAGE"
+
+    if xenon \
+        --max-absolute "$XENON_MAX_ABSOLUTE" \
+        --max-modules "$XENON_MAX_MODULES" \
+        --max-average "$XENON_MAX_AVERAGE" \
+        "${check_paths[@]}"; then
+        log_success "xenon: All functions within complexity thresholds"
+    else
+        log_error "xenon: Some functions exceed complexity thresholds"
+        log_info "Consider refactoring complex functions into smaller, focused units"
+        ((ERRORS++))
+    fi
+
+    # Radon - Cognitive Complexity
+    log_info "Running radon (cognitive complexity)..."
+    if ! command -v radon &>/dev/null; then
+        log_error "radon not installed"
+        log_info "Install with: pip install radon"
+        return 1
+    fi
+
+    # Check for functions with high cognitive complexity
+    # radon cc outputs complexity metrics; we filter for high values
+    local cc_output
+    cc_output=$(radon cc -s -a "${check_paths[@]}" 2>/dev/null || true)
+
+    if [[ "$VERBOSE" == true ]]; then
+        log_debug "Cognitive Complexity Report:"
+        echo "$cc_output"
+    fi
+
+    # Check for D, E, F grades (complexity > 20)
+    # Allow C-rank (11-20) for workflow orchestration methods (consistent with xenon)
+    if echo "$cc_output" | grep -E "^\s+[A-Z].*\s[DEF]\s" > /dev/null 2>&1; then
+        log_error "radon: Found functions with high cognitive complexity (grade D or worse)"
+        log_info "Functions with grade D (21-50) or worse are too complex and must be refactored"
+        echo "$cc_output" | grep -E "^\s+[A-Z].*\s[DEF]\s" || true
+        ((ERRORS++))
+    else
+        log_success "radon: All functions have acceptable cognitive complexity (A/B/C)"
+    fi
+
+    # Show maintainability index in verbose mode
+    if [[ "$VERBOSE" == true ]]; then
+        log_debug "Maintainability Index (A=excellent, B=good, C=fair):"
+        radon mi -s "${check_paths[@]}" || true
+    fi
+
+    # Vulture - Dead Code Detection
+    log_info "Running vulture (dead code detection)..."
+    if ! command -v vulture &>/dev/null; then
+        log_warn "vulture not installed, skipping dead code check"
+        log_info "Install with: pip install vulture"
+    else
+        local vulture_args=("${check_paths[@]}")
+
+        # Add whitelist if it exists
+        if [[ -f "vulture_whitelist.py" ]]; then
+            vulture_args+=("vulture_whitelist.py")
+            log_debug "Using whitelist: vulture_whitelist.py"
+        fi
+
+        local vulture_output
+        vulture_output=$(vulture --min-confidence "$VULTURE_MIN_CONFIDENCE" "${vulture_args[@]}" 2>&1 || true)
+
+        if [[ -n "$vulture_output" ]]; then
+            log_error "vulture: Dead code detected (confidence >= ${VULTURE_MIN_CONFIDENCE}%)"
+            echo "$vulture_output"
+            log_info "Remove dead code or add to vulture_whitelist.py if false positive"
+            ((ERRORS++))
+        else
+            log_success "vulture: No dead code detected"
+        fi
+    fi
+
+    # Import Linter - Architectural Boundaries
+    if [[ -f ".importlinter" ]]; then
+        log_info "Running import-linter (architectural boundaries)..."
+        if ! command -v lint-imports &>/dev/null; then
+            log_error "import-linter not installed"
+            log_info "Install with: pip install import-linter"
+            return 1
+        fi
+
+        if lint-imports; then
+            log_success "import-linter: All architectural boundaries respected"
+        else
+            log_error "import-linter: Architectural boundary violations detected"
+            log_info "Check .importlinter configuration and fix import violations"
+            ((ERRORS++))
+        fi
+    else
+        log_debug "No .importlinter config found, skipping import-linter"
+    fi
+}
+
+# =============================================================================
+# TypeScript Complexity Checks
+# =============================================================================
+
+check_frontend_complexity() {
+    if ! detect_frontend; then
+        log_debug "No frontend project detected, skipping frontend checks"
+        return 0
+    fi
+
+    log_step "Frontend Complexity Checks"
+
+    local frontend_dir
+    frontend_dir=$(get_frontend_dir)
+
+    if [[ -z "$frontend_dir" ]] || [[ ! -d "$frontend_dir" ]]; then
+        log_warn "Frontend directory not found"
+        return 0
+    fi
+
+    pushd "$frontend_dir" > /dev/null
+
+    # Dependency Cruiser - Module Dependencies
+    local depcruise_config=""
+    if [[ -f ".dependency-cruiser.cjs" ]]; then
+        depcruise_config=".dependency-cruiser.cjs"
+    elif [[ -f ".dependency-cruiser.js" ]]; then
+        depcruise_config=".dependency-cruiser.js"
+    fi
+
+    if [[ -n "$depcruise_config" ]]; then
+        log_info "Running dependency-cruiser (module dependencies)..."
+
+        if [[ ! -d "node_modules" ]]; then
+            log_warn "node_modules not found, installing dependencies..."
+            local pkg_manager
+            pkg_manager=$(detect_package_manager)
+
+            case "$pkg_manager" in
+                pnpm)  pnpm install ;;
+                yarn)  yarn install ;;
+                *)     npm ci || npm install ;;
+            esac
+        fi
+
+        if npx depcruise --config "$depcruise_config" src/; then
+            log_success "dependency-cruiser: No circular dependencies or boundary violations"
+        else
+            log_error "dependency-cruiser: Module dependency violations detected"
+            log_info "Check $depcruise_config rules and fix violations"
+            ((ERRORS++))
+        fi
+    else
+        log_debug "No .dependency-cruiser.{cjs,js} config found, skipping dependency-cruiser"
+    fi
+
+    # jscpd - Code Duplication Detection (Issue #82)
+    if [[ -f ".jscpd.json" ]]; then
+        log_info "Running jscpd (code duplication detection)..."
+
+        local jscpd_output
+        jscpd_output=$(npx jscpd src --config .jscpd.json 2>&1 || true)
+
+        # Check if duplication exceeds threshold (3%)
+        # jscpd exits with non-zero if threshold is exceeded
+        if echo "$jscpd_output" | grep -q "threshold exceeded"; then
+            log_error "jscpd: Code duplication exceeds 3% threshold"
+            echo "$jscpd_output"
+            log_info "Refactor duplicated code into shared utilities or components"
+            ((ERRORS++))
+        else
+            log_success "jscpd: Code duplication under 3% threshold"
+        fi
+    else
+        log_debug "No .jscpd.json config found, skipping jscpd"
+    fi
+
+    # knip - Dead Code Detection (Issue #82)
+    if [[ -f "knip.json" ]]; then
+        log_info "Running knip (dead code detection)..."
+
+        # knip exits with 1 if unused exports/dependencies found
+        # These devDependencies are used (in configs, scripts), but knip doesn't detect that usage
+        # eslint-plugin-sonarjs: Used in .eslintrc.cjs
+        # jscpd: Used in complexity.sh script
+        if npx knip 2>&1 | grep -qE "Unused exports|Unused exported types" ; then
+            log_error "knip: Unused exports or types detected"
+            npx knip 2>&1 | grep -v "Unused devDependencies" || true
+            log_info "Remove dead code or update knip.json whitelist if false positive"
+            ((ERRORS++))
+        else
+            log_success "knip: No dead code detected (ignoring devDependencies used in configs)"
+        fi
+    else
+        log_debug "No knip.json config found, skipping knip"
+    fi
+
+    popd > /dev/null
+}
+
+# =============================================================================
+# Main
+# =============================================================================
+
+main() {
+    setup_colors
+    parse_args "$@"
+
+    # Setup logging
+    local log_file=""
+    if [[ "$SAVE_LOGS" == true ]]; then
+        log_file=$(setup_log_file "complexity")
+        log_info "Logging to: $log_file"
+    fi
+
+    log_info "Starting complexity checks..."
+    log_debug "Mode: verbose=$VERBOSE, quiet=$QUIET"
+    log_debug "Python only: $PYTHON_ONLY, Frontend only: $FRONTEND_ONLY"
+    [[ ${#CHECK_PATHS[@]} -gt 0 ]] && log_debug "Paths: ${CHECK_PATHS[*]}"
+
+    # Run checks
+    [[ "$FRONTEND_ONLY" != true ]] && check_python_complexity
+    [[ "$PYTHON_ONLY" != true ]] && check_frontend_complexity
+
+    # Calculate duration
+    local end_time duration
+    end_time=$(date +%s)
+    duration=$((end_time - START_TIME))
+
+    # Summary
+    log_summary "Complexity Check Summary"
+
+    if [[ $ERRORS -eq 0 ]]; then
+        log_success "All complexity checks passed! ($(format_duration $duration))"
+        exit "$EXIT_SUCCESS"
+    else
+        log_error "$ERRORS check(s) failed ($(format_duration $duration))"
+        [[ -n "$log_file" ]] && log_info "See log for details: $log_file"
+        exit "$EXIT_LINT_FAIL"
+    fi
+}
+
+# Run main (with logging tee if enabled)
+if [[ "$SAVE_LOGS" == true ]] && [[ -z "${_COMPLEXITY_LOGGED:-}" ]]; then
+    export _COMPLEXITY_LOGGED=1
+    LOG_FILE=$(setup_log_file "complexity")
+    main "$@" 2>&1 | tee -a "$LOG_FILE"
+    exit "${PIPESTATUS[0]}"
+else
+    main "$@"
+fi

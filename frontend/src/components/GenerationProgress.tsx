@@ -1,5 +1,6 @@
-import { useEffect, useState, useRef } from 'react'
 import { Check, Loader2, Circle } from 'lucide-react'
+import { useEffect, useState, useRef } from 'react'
+
 import type { ProjectConfig, GenerationResult, StepProgress } from '../types'
 
 interface GenerationProgressProps {
@@ -18,11 +19,12 @@ const STEPS = [
   { id: 'demo_code', name: 'Demo code' },
 ]
 
-export function GenerationProgress({ config, onComplete }: GenerationProgressProps) {
+function useGenerationWebSocket(
+  config: ProjectConfig,
+  onComplete: (result: GenerationResult) => void
+) {
   const [steps, setSteps] = useState<Record<string, StepProgress>>(() =>
-    Object.fromEntries(
-      STEPS.map((s) => [s.id, { step: s.id, status: 'pending' as const }])
-    )
+    Object.fromEntries(STEPS.map((s) => [s.id, { step: s.id, status: 'pending' as const }]))
   )
   const [totalCost, setTotalCost] = useState(0)
   const [error, setError] = useState<string | null>(null)
@@ -33,15 +35,16 @@ export function GenerationProgress({ config, onComplete }: GenerationProgressPro
     wsRef.current = ws
 
     ws.onopen = () => {
-      // Send configuration
-      ws.send(JSON.stringify({
-        name: config.name,
-        platforms: config.platforms,
-        user_story: config.userStory,
-        features: config.features,
-        tech_stack: config.techStack,
-        aesthetics: config.aesthetics,
-      }))
+      ws.send(
+        JSON.stringify({
+          name: config.name,
+          platforms: config.platforms,
+          user_story: config.userStory,
+          features: config.features,
+          tech_stack: config.techStack,
+          aesthetics: config.aesthetics,
+        })
+      )
     }
 
     ws.onmessage = (event) => {
@@ -50,11 +53,7 @@ export function GenerationProgress({ config, onComplete }: GenerationProgressPro
       if (data.type === 'progress') {
         setSteps((prev) => ({
           ...prev,
-          [data.step]: {
-            step: data.step,
-            status: data.status,
-            details: data.details,
-          },
+          [data.step]: { step: data.step, status: data.status, details: data.details },
         }))
 
         if (data.details?.cost) {
@@ -80,26 +79,58 @@ export function GenerationProgress({ config, onComplete }: GenerationProgressPro
     }
   }, [config, onComplete])
 
-  const getStepIcon = (status: StepProgress['status']) => {
-    switch (status) {
-      case 'completed':
-        return <Check className="w-5 h-5 text-green-500" />
-      case 'in_progress':
-        return <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
-      default:
-        return <Circle className="w-5 h-5 text-gray-300" />
-    }
+  return { steps, totalCost, error }
+}
+
+function ErrorDisplay({ message }: { message: string }) {
+  return (
+    <div className="bg-white rounded-lg shadow p-6">
+      <div className="text-center">
+        <div className="text-red-500 text-xl mb-4">Generation Error</div>
+        <p className="text-gray-600">{message}</p>
+      </div>
+    </div>
+  )
+}
+
+function getStepIcon(status: StepProgress['status']) {
+  switch (status) {
+    case 'completed':
+      return <Check className="w-5 h-5 text-green-500" />
+    case 'in_progress':
+      return <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
+    default:
+      return <Circle className="w-5 h-5 text-gray-300" />
   }
+}
+
+function StepItem({ step, progress }: { step: { id: string; name: string }; progress?: StepProgress }) {
+  const status = progress?.status || 'pending'
+  const isInProgress = status === 'in_progress'
+  const isCompleted = status === 'completed'
+
+  return (
+    <div className={`flex items-center gap-4 p-3 rounded-lg ${isInProgress ? 'bg-blue-50' : ''}`}>
+      {getStepIcon(status)}
+      <span
+        className={`flex-1 ${
+          isCompleted ? 'text-gray-500' : isInProgress ? 'text-blue-700 font-medium' : 'text-gray-400'
+        }`}
+      >
+        {step.name}
+      </span>
+      {progress?.details?.cost && (
+        <span className="text-sm text-gray-500">${progress.details.cost.toFixed(2)}</span>
+      )}
+    </div>
+  )
+}
+
+export function GenerationProgress({ config, onComplete }: GenerationProgressProps) {
+  const { steps, totalCost, error } = useGenerationWebSocket(config, onComplete)
 
   if (error) {
-    return (
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="text-center">
-          <div className="text-red-500 text-xl mb-4">Generation Error</div>
-          <p className="text-gray-600">{error}</p>
-        </div>
-      </div>
-    )
+    return <ErrorDisplay message={error} />
   }
 
   return (
@@ -108,35 +139,9 @@ export function GenerationProgress({ config, onComplete }: GenerationProgressPro
       <p className="text-gray-600 mb-6">Please wait while we create your project...</p>
 
       <div className="space-y-4">
-        {STEPS.map((step) => {
-          const stepProgress = steps[step.id]
-          return (
-            <div
-              key={step.id}
-              className={`flex items-center gap-4 p-3 rounded-lg ${
-                stepProgress?.status === 'in_progress' ? 'bg-blue-50' : ''
-              }`}
-            >
-              {getStepIcon(stepProgress?.status || 'pending')}
-              <span
-                className={`flex-1 ${
-                  stepProgress?.status === 'completed'
-                    ? 'text-gray-500'
-                    : stepProgress?.status === 'in_progress'
-                    ? 'text-blue-700 font-medium'
-                    : 'text-gray-400'
-                }`}
-              >
-                {step.name}
-              </span>
-              {stepProgress?.details?.cost && (
-                <span className="text-sm text-gray-500">
-                  ${stepProgress.details.cost.toFixed(2)}
-                </span>
-              )}
-            </div>
-          )
-        })}
+        {STEPS.map((step) => (
+          <StepItem key={step.id} step={step} progress={steps[step.id]} />
+        ))}
       </div>
 
       <div className="mt-6 pt-4 border-t border-gray-200">

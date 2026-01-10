@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { ProjectForm } from './components/ProjectForm'
-import { GenerationProgress } from './components/GenerationProgress'
+
 import { CompletionScreen } from './components/CompletionScreen'
+import { GenerationProgress } from './components/GenerationProgress'
+import { ProjectForm } from './components/ProjectForm'
 import { SuggestionProvider } from './contexts/SuggestionContext'
 import type { ProjectConfig, GenerationResult } from './types'
 

@@ -34,6 +34,7 @@ REQUIRED actions:
 # CORRECT - Use these commands (in order of preference)
 pre-commit run --all-files     # Best: runs all checks as CI would
 ./scripts/lint.sh              # Linting: ruff check, ruff format, mypy
+./scripts/complexity.sh        # Complexity: xenon, radon, import-linter
 ./scripts/test.sh              # Tests: pytest with coverage
 ./scripts/check.sh             # Both lint and test
 
@@ -42,6 +43,7 @@ python -m ruff check src/      # May use wrong Python
 python -m mypy src/            # May use wrong Python
 pytest tests/                  # Bypasses coverage and config
 ruff format src/               # May use wrong version
+xenon src/                     # May use wrong Python or thresholds
 ```
 
 **Why?** Running tools directly via `python -m` or bare commands may use system Python instead of the virtual environment. Scripts ensure:
@@ -190,6 +192,64 @@ pre-commit run --all-files
 # Auto-fix issues (RECOMMENDED)
 ./scripts/format.sh
 ```
+
+### Running Complexity Checks
+
+```bash
+# Check code complexity and architectural boundaries (RECOMMENDED)
+./scripts/complexity.sh
+
+# Check Python only
+./scripts/complexity.sh --python
+
+# Check frontend only
+./scripts/complexity.sh --frontend
+
+# Via pre-commit
+pre-commit run complexity --all-files
+```
+
+**What does this check?**
+- **Cyclomatic Complexity** (xenon): Ensures functions aren't too complex
+- **Cognitive Complexity** (radon cc): Measures mental effort to understand code
+- **Dead Code Detection** (vulture): Finds unused code
+- **Maintainability Index** (radon mi): Measures code maintainability
+- **Architectural Boundaries** (import-linter): Prevents layer violations
+- **Module Dependencies** (dependency-cruiser): Prevents circular dependencies (frontend)
+
+**Current Thresholds (World-Class Standards - Issues #81, #82):**
+
+**Python:**
+- **Cyclomatic** (xenon):
+  - Absolute: C (11-20) - Allows workflow orchestration methods
+  - Modules: B (6-10) - Tightened from C
+  - Average: A (1-5) - Tightened from B
+- **Cognitive** (radon cc):
+  - Rejects: D+ (>20) - Too complex, must refactor
+  - Allows: A/B/C (1-20) - Acceptable, with C for workflow methods only
+  - Rationale: Workflow orchestration (iterate_ci, handle_reviews) inherently reaches C-rank
+- **Dead Code** (vulture): 0% tolerance (comprehensive whitelist for false positives)
+- **Architectural contracts**: 6 enforced, see `.importlinter`
+
+**TypeScript/Frontend:**
+- **Cyclomatic** (ESLint complexity): ≤10 (tightened from 15)
+- **Max nesting** (max-depth): ≤3 (tightened from 4)
+- **Max lines/file** (max-lines): ≤200 (tightened from 300)
+- **Max lines/function** (max-lines-per-function): ≤75 (tightened from 150)
+- **Max parameters** (max-params): ≤4 (tightened from 5)
+- **Max statements** (max-statements): ≤15 (tightened from 20)
+- **Cognitive** (sonarjs/cognitive-complexity): ≤10
+- **Duplicate strings** (sonarjs/no-duplicate-string): threshold 3
+- **Code duplication** (jscpd): <3% (currently 0.37%)
+- **Dead code** (knip): 0% unused exports/imports
+
+**If complexity checks fail:**
+1. Read the error message - it shows which function/module/component is too complex
+2. **Python**: Extract helper functions, reduce nesting, simplify conditionals
+3. **TypeScript/React**: Extract custom hooks, split into sub-components, use composition patterns
+4. For Python workflow methods at C-rank: acceptable if justified by orchestration needs
+5. See #70 (D→C refactoring), #81 (Python world-class), #82 (TypeScript world-class) for guidance
+6. DO NOT suppress warnings - fix the root cause (Rule 1: No Shortcuts)
 
 ### Adding a New Feature
 
@@ -397,6 +457,40 @@ ruff           - Linter and formatter
 mypy           - Type checker
 pre-commit     - Git hooks
 httpx          - HTTP client for testing
+
+# Advanced testing infrastructure (Issue #88)
+hypothesis         - Property-based testing
+mutmut             - Mutation testing
+pytest-benchmark   - Performance benchmarking
+pytest-snapshot    - Snapshot testing
+pytest-timeout     - Prevent hanging tests
+pytest-randomly    - Detect test interdependencies (disabled by default)
+pytest-xdist       - Parallel test execution
+
+# Python complexity tools
+xenon          - Cyclomatic complexity checker
+radon          - Cognitive complexity and maintainability metrics
+vulture        - Dead code detection
+import-linter  - Architectural boundary enforcement
+
+# Python world-class quality tools (Issue #86)
+bandit         - Security linting
+safety         - Dependency security scanning
+interrogate    - Docstring coverage enforcement
+pydocstyle     - Docstring style enforcement (Google convention)
+darglint       - Docstring-code consistency checking
+tryceratops    - Exception handling best practices
+refurb         - Modern Python suggestions
+pyupgrade      - Automatic syntax upgrades to Python 3.11+
+autoflake      - Remove unused imports/variables
+dead           - Dead code detection (alternative to vulture)
+commitizen     - Conventional commit validation
+
+# TypeScript/Frontend complexity tools
+eslint-plugin-sonarjs  - Cognitive complexity and code smells
+jscpd                  - Code duplication detection
+knip                   - Dead code and unused exports detection
+dependency-cruiser     - Module dependency analysis
 ```
 
 ## Git Workflow

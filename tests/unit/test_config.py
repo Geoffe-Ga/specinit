@@ -41,7 +41,9 @@ class TestConfigManager:
 
     def test_get_default_values(self, _mock_home: Path) -> None:
         """Default values should be returned for unset keys."""
+        # Reset config to ensure clean state
         config = ConfigManager()
+        config.reset()
 
         assert config.get("api.model") == "claude-sonnet-4-5-20250929"
         assert config.get("preferences.cost_limit") == 5.00
@@ -76,6 +78,7 @@ class TestConfigManager:
     def test_update_usage_increments_stats(self, _mock_home: Path) -> None:
         """Usage update should increment project count and cost."""
         config = ConfigManager()
+        config.reset()  # Reset to ensure clean state
 
         config.update_usage(cost=1.50)
         config.update_usage(cost=2.00)
