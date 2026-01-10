@@ -188,7 +188,7 @@ show_mutant() {
     if [[ -z "$MUTANT_ID" ]]; then
         log_error "MUTANT_ID is required for --apply action"
         log_info "Usage: $0 --apply <mutant_id>"
-        return "$EXIT_INVALID_ARGS"
+        return $EXIT_INVALID_ARGS
     fi
 
     activate_venv || return 1
