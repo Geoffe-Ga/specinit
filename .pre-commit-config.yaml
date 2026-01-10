@@ -1,14 +1,131 @@
+default_language_version:
+  python: python3.13
+
 repos:
+  # =============================================================================
+  # Git and File Format Checks
+  # =============================================================================
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0
     hooks:
-      - id: trailing-whitespace
-      - id: end-of-file-fixer
-      - id: check-yaml
       - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: check-case-conflict
       - id: check-merge-conflict
+      - id: check-symlinks
+      - id: check-toml
+      - id: check-yaml
+        args: ['--unsafe']
+      - id: check-json
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: fix-byte-order-marker
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+      - id: no-commit-to-branch
+        args: ['--branch', 'main', '--branch', 'master']
+      - id: trailing-whitespace
+      - id: check-ast
+      - id: debug-statements
+      - id: check-docstring-first
 
-  # Use local hooks that call validation scripts (ensures same checks as CI)
+  # =============================================================================
+  # Security
+  # =============================================================================
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.7
+    hooks:
+      - id: bandit
+        args: ['-c', 'pyproject.toml']
+        additional_dependencies: ['bandit[toml]']
+
+  # Secrets detection
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+
+  # =============================================================================
+  # Code Quality and Formatting
+  # =============================================================================
+  # Comprehensive linting and formatting with ruff
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.9
+    hooks:
+      - id: ruff
+        args: ['--fix']
+        exclude: 'vulture_whitelist\.py'
+      - id: ruff-format
+        exclude: 'vulture_whitelist\.py'
+
+  # Type checking
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.8.0
+    hooks:
+      - id: mypy
+        exclude: 'vulture_whitelist\.py'
+        additional_dependencies:
+          - 'pydantic>=2.0.0'
+          - 'types-requests>=2.31.0'
+          - 'types-PyYAML>=6.0.0'
+          - 'keyring>=24.0.0'
+
+  # Docstring coverage
+  - repo: https://github.com/econchick/interrogate
+    rev: 1.5.0
+    hooks:
+      - id: interrogate
+        args: ['-vv', '--fail-under=95', '--ignore-init-method', '--ignore-init-module']
+        additional_dependencies: ['setuptools']
+        exclude: '^(tests/|vulture_whitelist\.py)'
+
+  # Dead code detection (with confidence threshold to reduce false positives)
+  - repo: https://github.com/jendrikseipp/vulture
+    rev: v2.10
+    hooks:
+      - id: vulture
+        args: ['src/', 'tests/', '--min-confidence', '90']
+
+  # =============================================================================
+  # Code Modernization
+  # =============================================================================
+  # Upgrade Python syntax to 3.11+
+  - repo: https://github.com/asottile/pyupgrade
+    rev: v3.15.0
+    hooks:
+      - id: pyupgrade
+        args: ['--py311-plus']
+
+  # Remove unused imports and variables
+  - repo: https://github.com/PyCQA/autoflake
+    rev: v2.2.1
+    hooks:
+      - id: autoflake
+        args: [
+          '--in-place',
+          '--remove-all-unused-imports',
+          '--remove-unused-variables',
+          '--remove-duplicate-keys',
+          '--ignore-init-module-imports'
+        ]
+
+  # Exception handling best practices
+  - repo: https://github.com/guilatrova/tryceratops
+    rev: v2.3.2
+    hooks:
+      - id: tryceratops
+
+  # Modern Python suggestions
+  - repo: https://github.com/dosisod/refurb
+    rev: v1.26.0
+    hooks:
+      - id: refurb
+        additional_dependencies: ['pydantic>=2.0.0']
+
+  # =============================================================================
+  # Project-Specific Checks (Local)
+  # =============================================================================
   - repo: local
     hooks:
       - id: check-all
@@ -28,13 +145,27 @@ repos:
         pass_filenames: false
         require_serial: true
 
-  # Use local shellcheck if available (install with: brew install shellcheck)
-  - repo: local
-    hooks:
       - id: shellcheck
         name: shellcheck
         entry: shellcheck
         language: system
         types: [shell]
-        args: ["-x", "-S", "warning"]  # Follow source statements, only warn on warnings+
+        args: ["-x", "-S", "warning"]
         files: ^scripts/
+
+  # =============================================================================
+  # Commit Message Validation
+  # =============================================================================
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v3.13.0
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]
+
+# =============================================================================
+# CI Configuration
+# =============================================================================
+ci:
+  autofix_commit_msg: 'style: auto-fix by pre-commit hooks'
+  autoupdate_commit_msg: 'chore: update pre-commit hooks'
+  skip: []  # Don't skip anything in CI

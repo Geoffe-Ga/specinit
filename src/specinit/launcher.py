@@ -22,6 +22,6 @@ def start_server(port: int = 8765, output_dir: Path | None = None) -> None:
         output_dir: Directory for generated project output (default: cwd)
     """
     # Lazy import to break static dependency (intentional)
-    from specinit.server.app import start_server as _start_server  # noqa: PLC0415
+    from specinit.server.app import start_server as _start_server
 
     _start_server(port=port, output_dir=output_dir)
