@@ -1,5 +1,6 @@
 """Pytest configuration and fixtures."""
 
+import os
 import tempfile
 from collections.abc import Generator
 from pathlib import Path
@@ -7,6 +8,21 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
+from hypothesis import Verbosity, settings
+
+# =============================================================================
+# Hypothesis Configuration (Issue #88)
+# =============================================================================
+
+# Register Hypothesis profiles (matches pyproject.toml [tool.hypothesis.profiles.*])
+# Note: Hypothesis requires programmatic registration; pyproject.toml defines the default
+settings.register_profile("ci", max_examples=100, verbosity=Verbosity.verbose)
+settings.register_profile("dev", max_examples=10, verbosity=Verbosity.normal)
+settings.register_profile("debug", max_examples=1000, verbosity=Verbosity.debug)
+
+# Load profile from environment variable (default to dev)
+profile = os.getenv("HYPOTHESIS_PROFILE", "dev")
+settings.load_profile(profile)
 
 
 @pytest.fixture

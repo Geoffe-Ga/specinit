@@ -44,6 +44,14 @@ dev = [
     "pytest-cov>=4.1.0",
     "pytest-asyncio>=0.23.0",
     "httpx>=0.26.0",
+    # Advanced testing infrastructure (Issue #88)
+    "hypothesis>=6.0.0",  # Property-based testing
+    "mutmut>=2.4.0",  # Mutation testing
+    "pytest-benchmark>=4.0.0",  # Performance benchmarks
+    "pytest-snapshot>=0.9.0",  # Snapshot testing
+    "pytest-timeout>=2.2.0",  # Prevent hanging tests
+    "pytest-randomly>=3.15.0",  # Detect test interdependencies
+    "pytest-xdist>=3.5.0",  # Parallel test execution
     "mypy>=1.8.0",
     "ruff>=0.2.0",
     "pre-commit>=3.6.0",
@@ -145,7 +153,17 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-addopts = "-v --cov=src/specinit --cov-report=term-missing"
+addopts = "-v --cov=src/specinit --cov-report=term-missing --hypothesis-seed=0 -p no:randomly"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "e2e: marks tests as end-to-end tests",
+    "property: marks tests as property-based tests",
+    "snapshot: marks tests as snapshot tests",
+    "benchmark: marks tests as performance benchmarks",
+]
+timeout = 300  # 5 minutes max per test
+# Note: To enable test randomization (detect test interdependencies), remove -p no:randomly
 
 [tool.coverage.run]
 source = ["src/specinit"]
@@ -227,3 +245,32 @@ exclude = ["tests", ".venv", "venv"]
 # FURB115: len() checks are sometimes clearer than boolean checks
 # FURB149: Explicit boolean comparison is sometimes clearer
 ignore = ["FURB184", "FURB115", "FURB149"]
+
+# =============================================================================
+# Advanced Testing Infrastructure Configuration (Issue #88)
+# =============================================================================
+
+[tool.hypothesis]
+# Property-based testing configuration
+max_examples = 100
+derandomize = true
+# deadline is disabled by default
+
+[tool.hypothesis.profiles.dev]
+max_examples = 10
+verbosity = "normal"
+
+[tool.hypothesis.profiles.ci]
+max_examples = 100
+verbosity = "verbose"
+
+[tool.hypothesis.profiles.debug]
+max_examples = 1000
+verbosity = "debug"
+
+[tool.mutmut]
+# Mutation testing configuration
+paths_to_mutate = "src/"
+backup = false
+runner = "pytest -x --tb=short -q"
+tests_dir = "tests/"

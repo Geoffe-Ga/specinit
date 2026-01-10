@@ -50,12 +50,15 @@ Thumbs.db
 # Testing
 .coverage
 htmlcov/
+html/
 .pytest_cache/
 .tox/
 .nox/
 coverage.xml
 *.cover
 frontend/coverage/
+.hypothesis/
+.mutmut-cache
 
 # MyPy
 .mypy_cache/
