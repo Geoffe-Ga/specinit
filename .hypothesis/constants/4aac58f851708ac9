@@ -1,0 +1,4 @@
+# file: /Users/geoffgallinger/Projects/specinit/src/specinit/storage/config.py
+# hypothesis_version: 6.150.0
+
+[0.0, 5.0, 384, 448, 100000, '.', '.specinit', 'SPECINIT_API_KEY', 'anthropic', 'api', 'api.model', 'api_key', 'auto_git_init', 'auto_open_editor', 'config.yaml', 'cost_limit', 'last_used', 'max_tokens', 'model', 'none', 'preferences', 'projects_created', 'provider', 'show_cost_warnings', 'specinit', 'total_cost', 'usage', 'usage.last_used', 'usage.total_cost', 'w']

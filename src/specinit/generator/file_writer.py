@@ -1,6 +1,7 @@
 """File writing utilities for generated content."""
 
 import re
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -89,6 +90,23 @@ class FileWriter:
     def write_demo_code(self, content: str) -> None:
         """Parse demo code content and write to appropriate files."""
         self._parse_and_write_files(content)
+
+    def write_agent_profiles(self) -> None:
+        """Copy agent profile templates to .claude/profiles/ directory."""
+        # Get templates directory (project root is 4 parents up from this file)
+        templates_dir = Path(__file__).parent.parent.parent.parent / "templates" / "agent-profiles"
+
+        if not templates_dir.exists():
+            return
+
+        # Create .claude/profiles directory in generated project
+        profiles_dir = self.project_path / ".claude" / "profiles"
+        profiles_dir.mkdir(parents=True, exist_ok=True)
+
+        # Copy all profile files
+        for profile_file in templates_dir.glob("*.md"):
+            dest = profiles_dir / profile_file.name
+            shutil.copy2(profile_file, dest)
 
     def _parse_and_write_files(self, content: str) -> None:
         """Parse content in the --- FILE: path --- format and write files."""
