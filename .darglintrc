@@ -1,0 +1,5 @@
+[darglint]
+# Docstring-code consistency checker
+docstring_style = google
+strictness = short
+enable = DAR104

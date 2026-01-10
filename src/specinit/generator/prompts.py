@@ -36,9 +36,10 @@ All planning and specification documents should be saved in the /plan/ directory
             return ""
 
         # Format outputs into a readable section
-        formatted_files = []
-        for file_path, content in sorted(previous_outputs.items()):
-            formatted_files.append(f"--- FILE: {file_path} ---\n{content}\n")
+        formatted_files = [
+            f"--- FILE: {file_path} ---\n{content}\n"
+            for file_path, content in sorted(previous_outputs.items())
+        ]
 
         files_text = "\n".join(formatted_files)
         return f"""

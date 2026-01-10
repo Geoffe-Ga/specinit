@@ -107,7 +107,7 @@ class ConfigManager:
                     if file_mode & (stat.S_IRWXG | stat.S_IRWXO):
                         logger.warning(
                             f"API key file {key_file_path} has overly permissive permissions "
-                            f"({oct(file_mode)}). Consider setting to 0o600 (user read/write only)."
+                            f"({file_mode:#o}). Consider setting to 0o600 (user read/write only)."
                         )
 
                     # Read and return the key

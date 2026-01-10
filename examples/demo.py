@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-Demo script showing SpecInit in action.
+"""Demo script showing SpecInit in action.
 
 This demonstrates core functionality without making API calls:
 - Template selection based on platforms and tech stack

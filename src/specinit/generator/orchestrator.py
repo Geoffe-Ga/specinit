@@ -214,7 +214,7 @@ class GenerationOrchestrator:
             Context dictionary with previous_outputs added (if not first step)
         """
         # Copy base context
-        step_context = dict(base_context)
+        step_context = base_context.copy()
 
         # Define which file patterns each step needs from previous steps
         # This prevents context explosion by limiting what gets passed to Claude API

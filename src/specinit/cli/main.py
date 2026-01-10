@@ -38,7 +38,6 @@ def cli() -> None:
 
     Transform your project ideas into working codebases in minutes.
     """
-    pass
 
 
 @cli.command()
@@ -158,7 +157,6 @@ def list(limit: int) -> None:
 @cli.group()
 def config() -> None:
     """Manage SpecInit configuration."""
-    pass
 
 
 @config.command("show")
