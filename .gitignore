@@ -57,6 +57,7 @@ coverage.xml
 *.cover
 frontend/coverage/
 .hypothesis/
+.mutmut-cache
 
 # MyPy
 .mypy_cache/

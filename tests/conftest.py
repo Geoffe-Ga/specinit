@@ -1,5 +1,6 @@
 """Pytest configuration and fixtures."""
 
+import os
 import tempfile
 from collections.abc import Generator
 from pathlib import Path
@@ -18,8 +19,9 @@ settings.register_profile("ci", max_examples=100, verbosity=Verbosity.verbose)
 settings.register_profile("dev", max_examples=10, verbosity=Verbosity.normal)
 settings.register_profile("debug", max_examples=1000, verbosity=Verbosity.debug)
 
-# Load the appropriate profile
-settings.load_profile("dev")  # Default to dev profile
+# Load the appropriate profile from environment variable (default to dev)
+profile = os.getenv("HYPOTHESIS_PROFILE", "dev")
+settings.load_profile(profile)
 
 
 @pytest.fixture
