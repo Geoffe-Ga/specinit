@@ -1,4 +1,0 @@
-# file: /Users/geoffgallinger/Projects/specinit/src/specinit/generator/cost.py
-# hypothesis_version: 6.150.0
-
-[0.0, 0.7, 0.8, 1.3, 3.0, 4.0, 15.0, 75.0, 1000000, 'cost', 'default', 'input', 'input_tokens', 'output', 'output_tokens']

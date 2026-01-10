@@ -1,4 +1,0 @@
-# file: /Users/geoffgallinger/Projects/specinit/src/specinit/cli/main.py
-# hypothesis_version: 6.150.0
-
-[1024, 8765, 65535, '\nNext steps:', '--api-key', '--limit', '--no-browser', '--output-dir', '--port', '-n', '-o', '...', '1', '__main__', 'api_key', 'auto_git_init', 'auto_open_editor', 'cost_limit', 'key', 'model', 'reset', 'set', 'show', 'sk-ant-', 'specinit', 'true', 'value', 'yes']

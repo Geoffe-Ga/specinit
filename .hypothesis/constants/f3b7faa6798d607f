@@ -1,4 +1,0 @@
-# file: /Users/geoffgallinger/Projects/specinit/src/specinit/generator/file_writer.py
-# hypothesis_version: 6.150.0
-
-['\'"', '.gitignore', '/', ':', '\\n?```$', '^```\\w*\\n?', 'directory_structure', 'missing_dirs', 'missing_files', 'plan', 'plan/', 'plan/audit-log.md', 'plan/product-spec.md', 'touch\\s+([^\\s]+)', 'valid']

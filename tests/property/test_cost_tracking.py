@@ -89,8 +89,9 @@ class TestCostTrackerProperties:
                 model=model,
             )
 
-        # Calculate sum of individual step costs
-        step_costs_sum = sum(tracker.get_step_cost(step_name) for step_name, _, _ in steps)
+        # Calculate sum of individual step costs (deduplicate step names)
+        unique_steps = {step_name for step_name, _, _ in steps}
+        step_costs_sum = sum(tracker.get_step_cost(step_name) for step_name in unique_steps)
 
         total_cost = tracker.get_total_cost()
 
