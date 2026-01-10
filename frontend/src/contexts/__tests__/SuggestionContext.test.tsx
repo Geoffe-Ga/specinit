@@ -1,15 +1,16 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
+import type { Mock } from 'vitest'
 import { SuggestionProvider, useSuggestionContext } from '../SuggestionContext'
 
 // Mock fetch globally
-global.fetch = vi.fn()
+global.fetch = vi.fn() as Mock
 
 describe('SuggestionContext', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     // Reset fetch mock
-    ;(global.fetch as any).mockReset()
+    ;(global.fetch as Mock).mockReset()
   })
 
   describe('Context Provider', () => {
@@ -125,7 +126,7 @@ describe('SuggestionContext', () => {
         cost: 0.05,
       }
 
-      ;(global.fetch as any).mockResolvedValueOnce({
+      ;(global.fetch as Mock).mockResolvedValueOnce({
         ok: true,
         json: async () => mockResponse,
       })
@@ -154,12 +155,12 @@ describe('SuggestionContext', () => {
         cost: 0.01,
       }
 
-      let resolvePromise: (value: any) => void
+      let resolvePromise: (value: { ok: boolean; json: () => Promise<unknown> }) => void
       const fetchPromise = new Promise((resolve) => {
         resolvePromise = resolve
       })
 
-      ;(global.fetch as any).mockReturnValueOnce(fetchPromise)
+      ;(global.fetch as Mock).mockReturnValueOnce(fetchPromise)
 
       const { result } = renderHook(() => useSuggestionContext(), {
         wrapper: SuggestionProvider,
@@ -190,7 +191,7 @@ describe('SuggestionContext', () => {
     })
 
     it('should handle API errors gracefully', async () => {
-      ;(global.fetch as any).mockRejectedValueOnce(new Error('Network error'))
+      (global.fetch as Mock).mockRejectedValueOnce(new Error('Network error'))
 
       const { result } = renderHook(() => useSuggestionContext(), {
         wrapper: SuggestionProvider,
@@ -209,7 +210,7 @@ describe('SuggestionContext', () => {
     })
 
     it('should handle HTTP error responses', async () => {
-      ;(global.fetch as any).mockResolvedValueOnce({
+      (global.fetch as Mock).mockResolvedValueOnce({
         ok: false,
         json: async () => ({ detail: 'Server error' }),
       })
@@ -234,7 +235,7 @@ describe('SuggestionContext', () => {
         cost: 0.05,
       }
 
-      ;(global.fetch as any).mockResolvedValue({
+      ;(global.fetch as Mock).mockResolvedValue({
         ok: true,
         json: async () => mockResponse,
       })
@@ -270,7 +271,7 @@ describe('SuggestionContext', () => {
         cost: 0.05,
       }
 
-      ;(global.fetch as any).mockResolvedValue({
+      ;(global.fetch as Mock).mockResolvedValue({
         ok: true,
         json: async () => mockResponse,
       })
@@ -311,7 +312,7 @@ describe('SuggestionContext', () => {
         cost: 0.01,
       }
 
-      ;(global.fetch as any).mockResolvedValue({
+      ;(global.fetch as Mock).mockResolvedValue({
         ok: true,
         json: async () => mockResponse,
       })
@@ -357,7 +358,7 @@ describe('SuggestionContext', () => {
         cost: 0.01,
       }
 
-      ;(global.fetch as any).mockResolvedValue({
+      ;(global.fetch as Mock).mockResolvedValue({
         ok: true,
         json: async () => mockResponse,
       })
