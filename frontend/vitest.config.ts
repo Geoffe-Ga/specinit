@@ -31,6 +31,8 @@ export default defineConfig({
         'src/components/FormProgressIndicator.tsx', // Form orchestration, will be tested with E2E
         'src/components/form-steps/**/*', // Form orchestration components, E2E tested
         'src/components/github/**/*', // GitHub integration components, E2E tested
+        'src/components/Suggestion*.tsx', // Presentation components, tested via parent components
+        'src/components/FeatureInput.tsx', // Simple presentation component, tested via FeatureList
       ],
       include: [
         'src/contexts/**/*.{ts,tsx}',
