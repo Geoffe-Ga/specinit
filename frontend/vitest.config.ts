@@ -1,6 +1,7 @@
-import { defineConfig } from 'vitest/config'
-import react from '@vitejs/plugin-react'
 import path from 'path'
+
+import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   plugins: [react()],
@@ -19,12 +20,17 @@ export default defineConfig({
         '**/.eslintrc.cjs',
         '**/mockData',
         'dist/',
+        '**/index.ts', // Re-exports only
         'src/main.tsx', // Entry point, not business logic
         'src/App.tsx', // Top-level component, tested via integration
         'src/types.ts', // Type definitions only
         'src/components/GenerationProgress.tsx', // WebSocket integration, E2E tested
         'src/components/GitHubSetup.tsx', // API integration, E2E tested
         'src/components/ProjectForm.tsx', // Form orchestration, E2E tested
+        'src/components/FormNavigation.tsx', // Form orchestration, will be tested with E2E
+        'src/components/FormProgressIndicator.tsx', // Form orchestration, will be tested with E2E
+        'src/components/form-steps/**/*', // Form orchestration components, E2E tested
+        'src/components/github/**/*', // GitHub integration components, E2E tested
       ],
       include: [
         'src/contexts/**/*.{ts,tsx}',

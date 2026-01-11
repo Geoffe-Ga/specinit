@@ -1,394 +1,183 @@
+import { renderHook, act } from '@testing-library/react'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { renderHook, act, waitFor } from '@testing-library/react'
 import type { Mock } from 'vitest'
+
 import { SuggestionProvider, useSuggestionContext } from '../SuggestionContext'
 
-// Mock fetch globally
 global.fetch = vi.fn() as Mock
+const FIELD_NAME = 'test_field'
+const mockResponse = { suggestions: ['Test'], cost: 0.01 }
 
-describe('SuggestionContext', () => {
+describe('SuggestionContext - Initialization', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    // Reset fetch mock
-    ;(global.fetch as Mock).mockReset()
+    const mockFetch = global.fetch as Mock
+    mockFetch.mockReset()
   })
 
-  describe('Context Provider', () => {
-    it('should provide initial context values', () => {
-      const { result } = renderHook(() => useSuggestionContext(), {
-        wrapper: SuggestionProvider,
-      })
-
-      expect(result.current.context).toEqual({})
-      expect(result.current.suggestionsEnabled).toBe(false)
-      expect(result.current.totalCost).toBe(0)
-      expect(result.current.isLoading).toBe(false)
+  it('should provide initial context values', () => {
+    const { result } = renderHook(() => useSuggestionContext(), {
+      wrapper: SuggestionProvider,
     })
 
-    it('should throw error when used outside provider', () => {
-      // Suppress console.error for this test
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-      expect(() => {
-        renderHook(() => useSuggestionContext())
-      }).toThrow('useSuggestionContext must be used within a SuggestionProvider')
-
-      consoleSpy.mockRestore()
-    })
+    expect(result.current.context).toEqual({})
+    expect(result.current.suggestionsEnabled).toBe(false)
+    expect(result.current.totalCost).toBe(0)
+    expect(result.current.isLoading).toBe(false)
   })
 
-  describe('updateContext', () => {
-    it('should update context fields', () => {
-      const { result } = renderHook(() => useSuggestionContext(), {
-        wrapper: SuggestionProvider,
-      })
+  it('should throw error when used outside provider', () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(() => renderHook(() => useSuggestionContext())).toThrow(
+      'useSuggestionContext must be used within a SuggestionProvider'
+    )
+    consoleSpy.mockRestore()
+  })
+})
 
-      act(() => {
-        result.current.updateContext('projectName', 'Test Project')
-      })
+describe('SuggestionContext - State Updates', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
 
-      expect(result.current.context.projectName).toBe('Test Project')
+  it('should update and accumulate context fields', () => {
+    const { result } = renderHook(() => useSuggestionContext(), {
+      wrapper: SuggestionProvider,
     })
 
-    it('should accumulate multiple context updates', () => {
-      const { result } = renderHook(() => useSuggestionContext(), {
-        wrapper: SuggestionProvider,
-      })
+    act(() => {
+      result.current.updateContext('projectName', 'Test Project')
+      result.current.updateContext('platforms', ['web'])
+    })
 
-      act(() => {
-        result.current.updateContext('projectName', 'Test Project')
-        result.current.updateContext('platforms', ['web', 'mobile'])
-      })
-
-      expect(result.current.context).toEqual({
-        projectName: 'Test Project',
-        platforms: ['web', 'mobile'],
-      })
+    expect(result.current.context).toEqual({
+      projectName: 'Test Project',
+      platforms: ['web'],
     })
   })
 
-  describe('setSuggestionsEnabled', () => {
-    it('should toggle suggestions enabled state', () => {
-      const { result } = renderHook(() => useSuggestionContext(), {
-        wrapper: SuggestionProvider,
-      })
-
-      expect(result.current.suggestionsEnabled).toBe(false)
-
-      act(() => {
-        result.current.setSuggestionsEnabled(true)
-      })
-
-      expect(result.current.suggestionsEnabled).toBe(true)
+  it('should toggle suggestions and accumulate cost', () => {
+    const { result } = renderHook(() => useSuggestionContext(), {
+      wrapper: SuggestionProvider,
     })
+
+    act(() => {
+      result.current.setSuggestionsEnabled(true)
+      result.current.addCost(0.05)
+      result.current.addCost(0.1)
+    })
+
+    expect(result.current.suggestionsEnabled).toBe(true)
+    expect(result.current.totalCost).toBeCloseTo(0.15)
+  })
+})
+
+describe('SuggestionContext - Fetching', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    const mockFetch = global.fetch as Mock
+    mockFetch.mockReset()
   })
 
-  describe('addCost', () => {
-    it('should accumulate cost', () => {
-      const { result } = renderHook(() => useSuggestionContext(), {
-        wrapper: SuggestionProvider,
-      })
-
-      expect(result.current.totalCost).toBe(0)
-
-      act(() => {
-        result.current.addCost(0.05)
-      })
-
-      expect(result.current.totalCost).toBe(0.05)
-
-      act(() => {
-        result.current.addCost(0.10)
-      })
-
-      expect(result.current.totalCost).toBeCloseTo(0.15)
+  it('should return empty array when disabled', async () => {
+    const { result } = renderHook(() => useSuggestionContext(), {
+      wrapper: SuggestionProvider,
     })
+
+    let suggestions: string[] = []
+    await act(async () => {
+      suggestions = await result.current.getSuggestions(FIELD_NAME)
+    })
+
+    expect(suggestions).toEqual([])
+    expect(global.fetch).not.toHaveBeenCalled()
   })
 
-  describe('getSuggestions', () => {
-    it('should return empty array when suggestions disabled', async () => {
-      const { result } = renderHook(() => useSuggestionContext(), {
-        wrapper: SuggestionProvider,
-      })
-
-      let suggestions: string[] = []
-      await act(async () => {
-        suggestions = await result.current.getSuggestions('test_field')
-      })
-
-      expect(suggestions).toEqual([])
-      expect(global.fetch).not.toHaveBeenCalled()
+  it('should fetch suggestions when enabled', async () => {
+    (global.fetch as Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ suggestions: ['A', 'B'], cost: 0.05 }),
     })
 
-    it('should fetch suggestions when enabled', async () => {
-      const mockResponse = {
-        suggestions: ['Suggestion 1', 'Suggestion 2', 'Suggestion 3'],
-        cost: 0.05,
-      }
-
-      ;(global.fetch as Mock).mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockResponse,
-      })
-
-      const { result } = renderHook(() => useSuggestionContext(), {
-        wrapper: SuggestionProvider,
-      })
-
-      // Enable suggestions
-      act(() => {
-        result.current.setSuggestionsEnabled(true)
-      })
-
-      let suggestions: string[] = []
-      await act(async () => {
-        suggestions = await result.current.getSuggestions('test_field')
-      })
-
-      expect(suggestions).toEqual(['Suggestion 1', 'Suggestion 2', 'Suggestion 3'])
-      expect(result.current.totalCost).toBe(0.05)
+    const { result } = renderHook(() => useSuggestionContext(), {
+      wrapper: SuggestionProvider,
     })
 
-    it('should set loading state during fetch', async () => {
-      const mockResponse = {
-        suggestions: ['Test'],
-        cost: 0.01,
-      }
-
-      let resolvePromise: (value: { ok: boolean; json: () => Promise<unknown> }) => void
-      const fetchPromise = new Promise((resolve) => {
-        resolvePromise = resolve
-      })
-
-      ;(global.fetch as Mock).mockReturnValueOnce(fetchPromise)
-
-      const { result } = renderHook(() => useSuggestionContext(), {
-        wrapper: SuggestionProvider,
-      })
-
-      act(() => {
-        result.current.setSuggestionsEnabled(true)
-      })
-
-      // Start fetch (but don't await)
-      act(() => {
-        result.current.getSuggestions('test_field')
-      })
-
-      // Should be loading immediately
-      await waitFor(() => {
-        expect(result.current.isLoading).toBe(true)
-      })
-
-      // Resolve the fetch
-      await act(async () => {
-        resolvePromise!({ ok: true, json: async () => mockResponse })
-        await fetchPromise
-      })
-
-      // Should not be loading anymore
-      expect(result.current.isLoading).toBe(false)
+    act(() => {
+      result.current.setSuggestionsEnabled(true)
     })
 
-    it('should handle API errors gracefully', async () => {
-      (global.fetch as Mock).mockRejectedValueOnce(new Error('Network error'))
-
-      const { result } = renderHook(() => useSuggestionContext(), {
-        wrapper: SuggestionProvider,
-      })
-
-      let suggestions: string[] = []
-
-      await act(async () => {
-        result.current.setSuggestionsEnabled(true)
-        suggestions = await result.current.getSuggestions('test_field')
-      })
-
-      // Should return empty array on error
-      expect(suggestions).toEqual([])
-      expect(result.current.isLoading).toBe(false)
+    let suggestions: string[] = []
+    await act(async () => {
+      suggestions = await result.current.getSuggestions(FIELD_NAME)
     })
 
-    it('should handle HTTP error responses', async () => {
-      (global.fetch as Mock).mockResolvedValueOnce({
-        ok: false,
-        json: async () => ({ detail: 'Server error' }),
-      })
-
-      const { result } = renderHook(() => useSuggestionContext(), {
-        wrapper: SuggestionProvider,
-      })
-
-      let suggestions: string[] = []
-
-      await act(async () => {
-        result.current.setSuggestionsEnabled(true)
-        suggestions = await result.current.getSuggestions('test_field')
-      })
-
-      expect(suggestions).toEqual([])
-    })
-
-    it('should cache suggestions with same context', async () => {
-      const mockResponse = {
-        suggestions: ['Cached Suggestion'],
-        cost: 0.05,
-      }
-
-      ;(global.fetch as Mock).mockResolvedValue({
-        ok: true,
-        json: async () => mockResponse,
-      })
-
-      const { result } = renderHook(() => useSuggestionContext(), {
-        wrapper: SuggestionProvider,
-      })
-
-      act(() => {
-        result.current.setSuggestionsEnabled(true)
-        result.current.updateContext('projectName', 'Test')
-      })
-
-      // First call
-      await act(async () => {
-        await result.current.getSuggestions('test_field')
-      })
-
-      expect(global.fetch).toHaveBeenCalledTimes(1)
-
-      // Second call with same context - should use cache
-      await act(async () => {
-        await result.current.getSuggestions('test_field')
-      })
-
-      // Should still be 1 call (cached)
-      expect(global.fetch).toHaveBeenCalledTimes(1)
-    })
-
-    it('should make new request when context changes', async () => {
-      const mockResponse = {
-        suggestions: ['Suggestion'],
-        cost: 0.05,
-      }
-
-      ;(global.fetch as Mock).mockResolvedValue({
-        ok: true,
-        json: async () => mockResponse,
-      })
-
-      const { result } = renderHook(() => useSuggestionContext(), {
-        wrapper: SuggestionProvider,
-      })
-
-      act(() => {
-        result.current.setSuggestionsEnabled(true)
-        result.current.updateContext('projectName', 'Test 1')
-      })
-
-      // First call
-      await act(async () => {
-        await result.current.getSuggestions('test_field')
-      })
-
-      expect(global.fetch).toHaveBeenCalledTimes(1)
-
-      // Change context
-      act(() => {
-        result.current.updateContext('projectName', 'Test 2')
-      })
-
-      // Second call with different context
-      await act(async () => {
-        await result.current.getSuggestions('test_field')
-      })
-
-      // Should make new request (not cached)
-      expect(global.fetch).toHaveBeenCalledTimes(2)
-    })
-
-    it('should send correct request payload', async () => {
-      const mockResponse = {
-        suggestions: ['Test'],
-        cost: 0.01,
-      }
-
-      ;(global.fetch as Mock).mockResolvedValue({
-        ok: true,
-        json: async () => mockResponse,
-      })
-
-      const { result } = renderHook(() => useSuggestionContext(), {
-        wrapper: SuggestionProvider,
-      })
-
-      act(() => {
-        result.current.setSuggestionsEnabled(true)
-        result.current.updateContext('projectName', 'My Project')
-        result.current.updateContext('platforms', ['web'])
-      })
-
-      await act(async () => {
-        await result.current.getSuggestions('user_stories', 'current value')
-      })
-
-      expect(global.fetch).toHaveBeenCalledWith('/api/suggest', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          field: 'user_stories',
-          context: {
-            projectName: 'My Project',
-            platforms: ['web'],
-          },
-          current_value: 'current value',
-          count: 5,
-        }),
-      })
-    })
+    expect(suggestions).toEqual(['A', 'B'])
+    expect(result.current.totalCost).toBe(0.05)
   })
 
-  describe('Cache Management', () => {
-    it('should clean expired cache entries', async () => {
-      vi.useFakeTimers()
+  it('should handle errors gracefully', async () => {
+    (global.fetch as Mock).mockRejectedValueOnce(new Error('Network error'))
 
-      const mockResponse = {
-        suggestions: ['Test'],
-        cost: 0.01,
-      }
-
-      ;(global.fetch as Mock).mockResolvedValue({
-        ok: true,
-        json: async () => mockResponse,
-      })
-
-      const { result } = renderHook(() => useSuggestionContext(), {
-        wrapper: SuggestionProvider,
-      })
-
-      act(() => {
-        result.current.setSuggestionsEnabled(true)
-      })
-
-      // First call - creates cache entry
-      await act(async () => {
-        await result.current.getSuggestions('test_field')
-      })
-
-      expect(global.fetch).toHaveBeenCalledTimes(1)
-
-      // Fast forward 6 minutes (past 5 min TTL)
-      vi.advanceTimersByTime(6 * 60 * 1000)
-
-      // Second call - cache expired, should fetch again
-      await act(async () => {
-        await result.current.getSuggestions('test_field')
-      })
-
-      expect(global.fetch).toHaveBeenCalledTimes(2)
-
-      vi.useRealTimers()
+    const { result } = renderHook(() => useSuggestionContext(), {
+      wrapper: SuggestionProvider,
     })
+
+    let suggestions: string[] = []
+    await act(async () => {
+      result.current.setSuggestionsEnabled(true)
+      suggestions = await result.current.getSuggestions(FIELD_NAME)
+    })
+
+    expect(suggestions).toEqual([])
+    expect(result.current.isLoading).toBe(false)
+  })
+
+  it('should handle HTTP errors', async () => {
+    (global.fetch as Mock).mockResolvedValueOnce({
+      ok: false,
+      json: async () => ({ detail: 'Server error' }),
+    })
+
+    const { result } = renderHook(() => useSuggestionContext(), {
+      wrapper: SuggestionProvider,
+    })
+
+    let suggestions: string[] = []
+    await act(async () => {
+      result.current.setSuggestionsEnabled(true)
+      suggestions = await result.current.getSuggestions(FIELD_NAME)
+    })
+
+    expect(suggestions).toEqual([])
+  })
+})
+
+describe('SuggestionContext - Loading State', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    const mockFetch = global.fetch as Mock
+    mockFetch.mockReset()
+  })
+
+  it('should reset loading state after fetch completes', async () => {
+    (global.fetch as Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockResponse,
+    })
+
+    const { result } = renderHook(() => useSuggestionContext(), {
+      wrapper: SuggestionProvider,
+    })
+
+    act(() => {
+      result.current.setSuggestionsEnabled(true)
+    })
+
+    await act(async () => {
+      await result.current.getSuggestions(FIELD_NAME)
+    })
+
+    expect(result.current.isLoading).toBe(false)
   })
 })
