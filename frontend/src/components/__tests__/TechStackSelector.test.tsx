@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+import { SuggestionProvider } from '../../contexts/SuggestionContext'
 import type { TechStack } from '../../types'
 import { TechStackSelector } from '../TechStackSelector'
 
@@ -11,13 +12,17 @@ const PLATFORMS_WEB = ['web']
 const PLATFORMS_CLI = ['cli']
 const PLATFORMS_API = ['api']
 
+const renderWithProvider = (component: React.ReactElement) => {
+  return render(<SuggestionProvider>{component}</SuggestionProvider>)
+}
+
 describe('TechStackSelector - Rendering', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
   it('should render all sections for web platform', () => {
-    render(
+    renderWithProvider(
       <TechStackSelector value={emptyTechStack} onChange={mockOnChange} platforms={PLATFORMS_WEB} />
     )
 
@@ -28,7 +33,7 @@ describe('TechStackSelector - Rendering', () => {
   })
 
   it('should render frontend options', () => {
-    render(
+    renderWithProvider(
       <TechStackSelector value={emptyTechStack} onChange={mockOnChange} platforms={PLATFORMS_WEB} />
     )
 
@@ -38,7 +43,7 @@ describe('TechStackSelector - Rendering', () => {
   })
 
   it('should render backend options', () => {
-    render(
+    renderWithProvider(
       <TechStackSelector value={emptyTechStack} onChange={mockOnChange} platforms={PLATFORMS_WEB} />
     )
 
@@ -48,7 +53,7 @@ describe('TechStackSelector - Rendering', () => {
   })
 
   it('should render database and tools options', () => {
-    render(
+    renderWithProvider(
       <TechStackSelector value={emptyTechStack} onChange={mockOnChange} platforms={PLATFORMS_WEB} />
     )
 
@@ -71,14 +76,14 @@ describe('TechStackSelector - Selection State', () => {
       tools: [],
     }
 
-    render(<TechStackSelector value={techStack} onChange={mockOnChange} platforms={PLATFORMS_WEB} />)
+    renderWithProvider(<TechStackSelector value={techStack} onChange={mockOnChange} platforms={PLATFORMS_WEB} />)
 
     expect(screen.getByRole('button', { name: 'React' })).toHaveClass('bg-blue-600', 'text-white')
     expect(screen.getByRole('button', { name: 'FastAPI' })).toHaveClass('bg-blue-600', 'text-white')
   })
 
   it('should show unselected options with gray background', () => {
-    render(
+    renderWithProvider(
       <TechStackSelector value={emptyTechStack} onChange={mockOnChange} platforms={PLATFORMS_WEB} />
     )
 
@@ -93,7 +98,7 @@ describe('TechStackSelector - Toggle Behavior', () => {
 
   it('should add option when clicking unselected', async () => {
     const user = userEvent.setup()
-    render(
+    renderWithProvider(
       <TechStackSelector value={emptyTechStack} onChange={mockOnChange} platforms={PLATFORMS_WEB} />
     )
 
@@ -116,7 +121,7 @@ describe('TechStackSelector - Toggle Behavior', () => {
       tools: [],
     }
 
-    render(<TechStackSelector value={techStack} onChange={mockOnChange} platforms={PLATFORMS_WEB} />)
+    renderWithProvider(<TechStackSelector value={techStack} onChange={mockOnChange} platforms={PLATFORMS_WEB} />)
     await user.click(screen.getByRole('button', { name: 'React' }))
 
     expect(mockOnChange).toHaveBeenCalledWith({
@@ -136,7 +141,7 @@ describe('TechStackSelector - Toggle Behavior', () => {
       tools: [],
     }
 
-    render(<TechStackSelector value={techStack} onChange={mockOnChange} platforms={PLATFORMS_WEB} />)
+    renderWithProvider(<TechStackSelector value={techStack} onChange={mockOnChange} platforms={PLATFORMS_WEB} />)
     await user.click(screen.getByRole('button', { name: 'PostgreSQL' }))
 
     expect(mockOnChange).toHaveBeenCalledWith({
@@ -154,7 +159,7 @@ describe('TechStackSelector - Platform Rendering', () => {
   })
 
   it('should show frontend and backend for web platform', () => {
-    render(
+    renderWithProvider(
       <TechStackSelector value={emptyTechStack} onChange={mockOnChange} platforms={PLATFORMS_WEB} />
     )
     expect(screen.getByText('Frontend')).toBeInTheDocument()
@@ -162,7 +167,7 @@ describe('TechStackSelector - Platform Rendering', () => {
   })
 
   it('should not show frontend or backend for cli platform', () => {
-    render(
+    renderWithProvider(
       <TechStackSelector value={emptyTechStack} onChange={mockOnChange} platforms={PLATFORMS_CLI} />
     )
     expect(screen.queryByText('Frontend')).not.toBeInTheDocument()
@@ -170,14 +175,14 @@ describe('TechStackSelector - Platform Rendering', () => {
   })
 
   it('should show backend for api platform', () => {
-    render(
+    renderWithProvider(
       <TechStackSelector value={emptyTechStack} onChange={mockOnChange} platforms={PLATFORMS_API} />
     )
     expect(screen.getByText('Backend')).toBeInTheDocument()
   })
 
   it('should always show database and tools sections', () => {
-    render(
+    renderWithProvider(
       <TechStackSelector value={emptyTechStack} onChange={mockOnChange} platforms={PLATFORMS_CLI} />
     )
     expect(screen.getByText('Database')).toBeInTheDocument()
