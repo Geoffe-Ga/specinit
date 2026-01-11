@@ -174,6 +174,7 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
   const { name, projectDescription, platforms, userStory, features, techStack, aesthetics, additionalContext, enableSuggestions, currentValues } = useWatchedFormFields(watch)
 
   // Update suggestion context with debouncing to prevent excessive re-renders
+  // Dependencies are individual fields, NOT currentValues, to avoid recreating timeout on every render
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       updateContext('projectName', name)
