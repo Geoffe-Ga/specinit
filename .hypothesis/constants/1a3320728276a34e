@@ -1,4 +1,0 @@
-# file: /Users/geoffgallinger/Projects/specinit/src/specinit/github/service.py
-# hypothesis_version: 6.150.0
-
-[200, 201, 405, 409, 422, 1000, '--force', '--rebase', '-b', '-u', '.git', '2022-11-28', 'Accept', 'Authorization', 'Content-Type', 'GitHubService', 'No response body', 'Unknown reason', 'X-GitHub-Api-Version', '^([^/]+)/([^/]+)$', 'add', 'application/json', 'auto_init', 'base', 'body', 'branch', 'checkout', 'closed', 'color', 'description', 'get-url', 'git', 'head', 'html_url', 'labels', 'main', 'merge_method', 'mergeable', 'message', 'milestone', 'name', 'number', 'open', 'origin', 'private', 'pull', 'pull_request', 'push', 'ref', 'remote', 'set-url', 'specinit-github', 'squash', 'state', 'title', 'token', 'workflow_runs']

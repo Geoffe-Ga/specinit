@@ -314,7 +314,13 @@ test_frontend() {
     log_info "Running frontend tests..."
 
     # Build test command
-    local test_cmd="npm test"
+    local test_cmd
+    if [[ "$NO_COVERAGE" == true ]]; then
+        test_cmd="npm test"
+    else
+        test_cmd="npm run test:coverage"
+    fi
+
     [[ "$QUIET" == true ]] && test_cmd="$test_cmd -- --silent"
     [[ "$VERBOSE" == true ]] && test_cmd="$test_cmd -- --verbose"
 

@@ -1,4 +1,0 @@
-# file: /Users/geoffgallinger/Projects/specinit/src/specinit/github/__init__.py
-# hypothesis_version: 6.150.0
-
-['CoverageThresholds', 'GitHubConfig', 'GitHubService', 'GitHubWorkflow']

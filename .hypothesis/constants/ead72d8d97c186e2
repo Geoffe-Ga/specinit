@@ -1,4 +1,0 @@
-# file: /Users/geoffgallinger/Projects/specinit/src/specinit/generator/prompts.py
-# hypothesis_version: 6.150.0
-
-['additional_context', 'aesthetics', 'backend', 'features', 'frontend', 'platforms', 'previous_outputs', 'tech_stack', 'template', 'tools', 'user_story']

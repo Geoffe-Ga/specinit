@@ -1,4 +1,0 @@
-# file: /Users/geoffgallinger/Projects/specinit/src/specinit/server/app.py
-# hypothesis_version: 6.150.0
-
-[0.0, 0.05, 0.1, 0.15, 0.25, 0.3, 0.4, 0.8, 2.0, 400, 401, 408, 429, 500, 502, 503, 1000, 2000, 8765, 10000, 1000000, '*', '/', '/api/config', '/api/estimate', '/api/github/status', '/api/health', '/api/suggest', '/ws/generate', '127.0.0.1', 'SpecInit', 'api.model', 'complete', 'configured', 'content', 'cost_limit', 'default', 'demo_code', 'details', 'dist', 'documentation', 'error', 'fallback.html', 'features', 'frontend', 'generation_time', 'has_api_key', 'healthy', 'index.html', 'info', 'input', 'login', 'message', 'model', 'output', 'output_dir', 'path', 'product_spec', 'progress', 'result', 'role', 'shutdown_event', 'static', 'status', 'step', 'structure', 'text', 'tooling', 'total_cost', 'type', 'user', 'username', 'valid']
