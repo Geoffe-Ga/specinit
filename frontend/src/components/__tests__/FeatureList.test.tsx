@@ -7,6 +7,19 @@ import { FeatureList } from '../FeatureList'
 // Module-level constants
 const mockOnChange = vi.fn()
 
+// Mock useSuggestionContext
+vi.mock('../../contexts/SuggestionContext', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../contexts/SuggestionContext')>()
+  return {
+    ...actual,
+    useSuggestionContext: vi.fn(() => ({
+      suggestionsEnabled: false,
+      getSuggestions: vi.fn(),
+      isLoading: false,
+    })),
+  }
+})
+
 describe('FeatureList - Rendering', () => {
   beforeEach(() => {
     vi.clearAllMocks()
